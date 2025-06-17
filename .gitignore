@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 虚拟环境
+venv/
+ENV/
+env/
+.env/
+
+# IDE 相关
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 日志文件
+logs/
+*.log
+
+# 配置文件（根据需要调整）
+# config.ini  # 如果配置文件需要共享，请取消此行注释
+
+# 临时文件
+.temp/
+tmp/
+
+# 数据文件
+*.csv
+*.xlsx
+*.xls
+*.db
+*.sqlite3
+
+# 密钥和证书
+*.pem
+*.key
+*.cert
+
+# 特定于项目的忽略项
+# 如果xtquant是第三方库，可能需要保留在版本控制中
+# xtquant/  # 如果需要忽略，请取消此行注释
+
+# 缓存文件
+.cache/ 
+
+# 配置文件
+config.ini

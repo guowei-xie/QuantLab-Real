@@ -83,3 +83,15 @@ def convert_to_current_date(timestamp):
     new_dt = datetime.combine(current_date, dt.time())
 
     return new_dt.timestamp()
+
+def calculate_volume(total_amount, price):
+    """
+    根据总额和价格计算交易数量，确保股数是100的整数倍
+    """
+    if total_amount is None or price is None:
+        return 0
+    if total_amount == 0 or price == 0:
+        return 0
+    max_shares = total_amount // price
+    shares = (max_shares // 100) * 100
+    return int(shares)

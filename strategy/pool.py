@@ -1,7 +1,7 @@
 """
 股池策略模块
 """
-from core.data import MyXtData
+from broker.data import MyXtData
 from utils.logger import logger
 from utils.anis import GREEN, RESET
 

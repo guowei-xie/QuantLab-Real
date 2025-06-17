@@ -3,11 +3,11 @@ QuantLab-Real 主程序
 """
 import configparser
 import time
-from core.data import MyXtData
-from core.trader import XtTrader
+from broker.data import get_stock_list_in_sector
+from broker.broker import Broker
 from strategy.pool import get_stock_pool_in_main_board
 from utils.logger import logger
-from utils.anis import GREEN, YELLOW, RESET
+from utils.anis import GREEN, YELLOW, RESET, RED
 
 def main():
     """主函数"""
@@ -17,22 +17,20 @@ def main():
     account_id = config['ACCOUNT']['ACCOUNT_ID']    
     mini_qmt_path = config['ACCOUNT']['MINI_QMT_PATH']
     
-    # 初始化数据对象
-    data_api = MyXtData()
     # 创建交易账号连接
-    trader = XtTrader(account_id, mini_qmt_path)
-    trader.connect()
+    broker = Broker(account_id, mini_qmt_path)
+    broker.connect()
 
 
-    if not trader:
-        logger.error(f"{YELLOW}【程序退出】{RESET}交易连接失败")
+    if not broker.is_connected:
+        logger.error(f"{RED}【程序退出】{RESET}交易连接失败")
         return
     
     # 查询账户资金信息
-    trader.get_asset(display=True)
+    broker.get_asset(display=True)
     
     # 查询持仓信息
-    trader.get_positions(display=True)
+    broker.get_positions(display=True)
 
     # 获取主板股票池
     stock_pool = get_stock_pool_in_main_board()
@@ -46,8 +44,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        if trader:
-            trader.disconnect()
+        if broker:
+            broker.disconnect()
 
 if __name__ == '__main__':
     main()

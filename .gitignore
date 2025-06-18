@@ -43,6 +43,7 @@ logs/
 # 临时文件
 .temp/
 tmp/
+test*
 
 # 数据文件
 *.csv

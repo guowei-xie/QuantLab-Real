@@ -2,7 +2,7 @@ from xtquant import xtdata
 from utils.logger import logger
 from tqdm import tqdm
 from utils.anis import GREEN, RESET, YELLOW, RED
-from utils.util import add_stock_suffix
+from utils.util import add_stock_suffix, add_stock_suffix_list
 import pandas as pd
 
 """
@@ -41,10 +41,11 @@ def get_daily_data(stock_list=['000001.SZ'], period='1d', start_time='', end_tim
     返回:
         pandas.DataFrame: 行情数据
     """
+
     try:
-        df = xtdata.get_market_data_ex(
+        dict_data = xtdata.get_market_data_ex(
             field_list=[],
-            stock_list=add_stock_suffix(stock_list),
+            stock_list=add_stock_suffix_list(stock_list),
             period=period,
             start_time=start_time,
             end_time=end_time,
@@ -52,10 +53,10 @@ def get_daily_data(stock_list=['000001.SZ'], period='1d', start_time='', end_tim
             dividend_type='none',
             fill_data=True
         )
-        return df
+        return dict_data
     except Exception as e:
         logger.error(f"{RED}【行情数据获取失败】{RESET} {e}")
-        return pd.DataFrame()
+        return {}
 
 def get_stock_list_in_sector(sector_name):
     """

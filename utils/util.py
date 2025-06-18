@@ -1,6 +1,8 @@
 from xtquant import xtconstant
 from datetime import datetime
 from utils.anis import RED, GREEN, YELLOW, BLUE, RESET
+import time
+from utils.logger import logger
 
 def add_stock_suffix(stock_code):
     """
@@ -15,6 +17,7 @@ def add_stock_suffix(stock_code):
     异常:
         ValueError: 当股票代码不是6位数字时抛出
     """
+
     # 如果已经有后缀，直接返回
     if '.' in stock_code:
         return stock_code
@@ -32,6 +35,12 @@ def add_stock_suffix(stock_code):
         return f"{stock_code}.BJ"  # 北京证券交易所
     
     return f"{stock_code}.SH"  # 默认为上海证券交易所
+
+def add_stock_suffix_list(stock_code_list):
+    """
+    为给定的股票代码列表添加相应的后缀
+    """
+    return [add_stock_suffix(stock) for stock in stock_code_list]
 
 def timestamp_to_datetime_string(timestamp):
     """
@@ -95,3 +104,27 @@ def calculate_volume(total_amount, price):
     max_shares = total_amount // price
     shares = (max_shares // 100) * 100
     return int(shares)
+
+def timer(func, interval, *args, **kwargs):
+    """
+    定时器工具，按指定时间间隔循环调用函数
+    
+    参数:
+        func (callable): 要调用的函数
+        interval (float): 调用间隔时间(秒)
+        *args: 传递给函数的位置参数
+        **kwargs: 传递给函数的关键字参数
+        
+    使用方法:
+        timer(my_function, 5, arg1, arg2, key1=value1)
+        
+    注意:
+        使用Ctrl+C可以终止定时器
+    """
+    try:
+        while True:
+            func(*args, **kwargs)
+            time.sleep(interval)
+    except Exception as e:
+        logger.error(f"{RED}定时器执行出错: {e}{RESET}")
+

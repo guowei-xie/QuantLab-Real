@@ -5,7 +5,7 @@ import configparser
 import time
 from broker.data import get_stock_list_in_sector
 from broker.broker import Broker
-from strategy.pool import get_stock_pool_in_main_board
+from filter.pool import get_stock_pool_in_main_board
 from utils.logger import logger
 from utils.anis import GREEN, YELLOW, RESET, RED
 

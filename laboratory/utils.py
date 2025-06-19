@@ -130,4 +130,75 @@ def is_nearly_limit_up(stock_code, nearly_days=5, tolerance=0.002):
             return True 
     return False
     
+def get_neary_limit_up_days(stock_code, nearly_days=5, tolerance=0.002):
+    """
+    获取股票近nearly_days天有过涨停的天数，返回天数
+    
+    参数:
+        stock_code (str): 股票代码
+        nearly_days (int): 近多少天
+        tolerance (float): 允许误差
+    """
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time='', end_time='', count=nearly_days)
+    df = dict_data.get(stock_code)
+    if df is None:
+        return 0
+    
+    limit_up_days = 0
+    for index, row in df.iterrows():   
+        if is_limit_up(stock_code, row['close'], row['preClose'], tolerance):
+            limit_up_days += 1
+    return limit_up_days
+    
+def get_last_limit_up_kline(stock_code, nearly_days=5, tolerance=0.002):
+    """
+    获取股票近nearly_days天中，最后一次涨停的K线
+    无涨停返回空
+    有涨停返回当天该股票的日k线信息
+    
+    参数:
+        stock_code (str): 股票代码
+        nearly_days (int): 近多少天
+        tolerance (float): 允许误差
+    """
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time='', end_time='', count=nearly_days)
+    df = dict_data.get(stock_code)
+    df = df.sort_values(by='time', ascending=False)
+    if df is None:
+        return None
+    for index, row in df.iterrows():
+        if is_limit_up(stock_code, row['close'], row['preClose'], tolerance):
+            return row
+    return None
 
+# 获取指定日期区间K线的最低价
+def get_klines_low_price(stock_code, start_time, end_time):
+    """
+    获取指定日期区间K线的最低价
+    
+    参数:
+        stock_code (str): 股票代码
+        start_time (str): 开始时间
+        end_time (str): 结束时间
+    """
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time=start_time, end_time=end_time)
+    df = dict_data.get(stock_code)
+    if df is None:
+        return 0
+    return df['low'].min()
+
+def is_last_day_limit_up(stock_code, tolerance=0.002):
+    """
+    判断股票昨天的收盘价是否涨停
+    
+    参数:
+        stock_code (str): 股票代码
+        tolerance (float): 允许误差
+    """
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time='', end_time='', count=-1)
+    df = dict_data.get(stock_code)
+    if df is None:
+        return False
+    if is_limit_up(stock_code, df.iloc[-1]['close'], df.iloc[-1]['preClose'], tolerance):
+        return True
+    return False

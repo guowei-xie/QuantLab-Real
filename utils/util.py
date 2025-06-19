@@ -1,8 +1,9 @@
 from xtquant import xtconstant
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils.anis import RED, GREEN, YELLOW, BLUE, RESET
 import time
 from utils.logger import logger
+
 
 def add_stock_suffix(stock_code):
     """
@@ -54,6 +55,32 @@ def timestamp_to_datetime_string(timestamp):
     """
     dt_object = datetime.fromtimestamp(timestamp)
     return dt_object.strftime('%Y-%m-%d %H:%M:%S')
+
+def timestamp_to_date_number(timestamp):
+    """
+    将时间戳转换为日期数字格式
+    
+    参数:
+        timestamp (float): 时间戳（可以是秒级或毫秒级）
+        
+    返回:
+        str: 格式化的日期字符串 'YYYYMMDD'
+    """
+    # 判断是否为毫秒级时间戳（通常大于10^12）
+    if timestamp > 10**12:
+        timestamp = timestamp / 1000.0
+    return datetime.fromtimestamp(timestamp).strftime('%Y%m%d')
+
+def timestamp_to_date_number_plus_n_days(timestamp, n=1):
+    """
+    将时间戳转换为日期数字格式，并加n天
+    """
+    date_number = timestamp_to_date_number(timestamp)
+    year = int(date_number[:4])
+    month = int(date_number[4:6])
+    day = int(date_number[6:8])
+    next_day = datetime(year, month, day) + timedelta(days=n)
+    return next_day.strftime('%Y%m%d')
 
 def parse_order_type(order_type):
     """

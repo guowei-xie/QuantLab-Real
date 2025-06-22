@@ -15,6 +15,6 @@ def get_stock_pool_in_main_board():
     """
     stock_list = get_stock_list_in_sector('沪深A股')
     result = [stock for stock in stock_list if is_main_board(stock) and not is_st(stock) and not is_suspended(stock)]
-    logger.info(f"{GREEN}【获取股票池】{RESET}筛选主板股票池，成功获取{len(result)}只股票")
+    logger.info(f"{GREEN}【获取主板股票池】{RESET}筛选主板股票池，成功获取{len(result)}只股票")
     return result
 

@@ -2,8 +2,10 @@ from xtquant import xtdata
 from utils.logger import logger
 from tqdm import tqdm
 from utils.anis import GREEN, RESET, YELLOW, RED
-from utils.util import add_stock_suffix, add_stock_suffix_list
+from utils.util import add_stock_suffix, add_stock_suffix_list, timestamp_to_date_number
 import pandas as pd
+import time
+
 
 """
 行情数据处理模块，封装xtquant的数据接口
@@ -143,7 +145,7 @@ def get_stock_name(stock_code):
     stock_code_with_suffix = add_stock_suffix(stock_code)
     return xtdata.get_instrument_detail(stock_code_with_suffix)['InstrumentName']
     
-def subscribe_quote(stock_code, period, callback):
+def subscribe_quote(stock_code, period, callback=None):
     """
     订阅股票行情数据
     
@@ -157,10 +159,10 @@ def subscribe_quote(stock_code, period, callback):
     """
     try:
         xtdata.subscribe_quote(stock_code, period=period, callback=callback)
-        logger.info(f"{GREEN}【订阅成功】{RESET} 股票:{stock_code} 周期:{period}")
+        logger.info(f"{GREEN}【订阅成功】{RESET} 股票:{stock_code} {get_stock_name(stock_code)} 周期:{period}")
         return True
     except Exception as e:
-        logger.error(f"{RED}【订阅失败】{RESET} 股票:{stock_code} 周期:{period} 错误:{e}")
+        logger.error(f"{RED}【订阅失败】{RESET} 股票:{stock_code} {get_stock_name(stock_code)} 周期:{period} 错误:{e}")
         return False
 
 def unsubscribe_quote(stock_code):
@@ -181,5 +183,28 @@ def unsubscribe_quote(stock_code):
         logger.error(f"{RED}【取消订阅失败】{RESET} 股票:{stock_code} 错误:{e}")
         return False
 
+def do_subscribe_quote(stock_list, period, callback=None):
+    """
+    订阅股票行情数据
+    """
+    for stock in stock_list:
+        subscribe_quote(stock, period, callback=callback)
+    time.sleep(1)
 
+def prepare_open_data(stock_code, trade_date):
+    """
+    准备trade_date日的开盘数据
+    """
+    daily_data = get_daily_data([stock_code], '1d', start_time=trade_date, count=1)
+    info_data = get_stock_info(stock_code)
+    if daily_data[stock_code]['open'].empty or info_data is None:
+        logger.warning(f"{YELLOW}【准备开盘数据】{RESET} 股票:{stock_code} 交易日期:{trade_date} 无数据")
+        return None
+    return {
+        'stock_name': info_data['股票名称'],
+        'limit_up_price': info_data['当日涨停价'],
+        'limit_down_price': info_data['当日跌停价'],
+        'open_price': daily_data[stock_code]['open'],
+        'preclose_price': info_data['前收盘价'],
+    }
 

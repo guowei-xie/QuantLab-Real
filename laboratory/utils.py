@@ -202,3 +202,54 @@ def is_last_day_limit_up(stock_code, tolerance=0.002):
     if is_limit_up(stock_code, df.iloc[-1]['close'], df.iloc[-1]['preClose'], tolerance):
         return True
     return False
+
+def caculate_macd(gmd_data):
+    """
+    计算macd指标
+    
+    参数:
+        gmd_data (DataFrame): 行情数据，需要包含close列
+        
+    返回:
+        DataFrame: 包含原始数据和MACD指标(DIF、DEA和MACD)的DataFrame
+    """
+    # 复制原始数据，避免修改原始数据
+    df = gmd_data.copy()
+    
+    # 计算EMA(12)和EMA(26)
+    df['EMA12'] = df['close'].ewm(span=12, adjust=False).mean()
+    df['EMA26'] = df['close'].ewm(span=26, adjust=False).mean()
+    
+    # 计算DIF: DIF = EMA(12) - EMA(26)
+    df['DIF'] = df['EMA12'] - df['EMA26']
+    
+    # 计算DEA: DEA = EMA(DIF, 9)
+    df['DEA'] = df['DIF'].ewm(span=9, adjust=False).mean()
+    
+    # 计算MACD柱: MACD = 2 * (DIF - DEA)
+    df['MACD'] = 2 * (df['DIF'] - df['DEA'])
+    
+    # 删除中间计算列
+    df.drop(['EMA12', 'EMA26'], axis=1, inplace=True)
+    
+    return df
+
+def is_macd_top(macd_data):
+    """
+    判断MACD柱是否见顶
+    
+    参数:
+        macd_data (DataFrame): 包含MACD列的行情数据
+        
+    返回:
+        bool: MACD柱见顶返回True，否则返回False
+    """
+    # 检查数据量是否足够
+    if len(macd_data) < 4:
+        return False
+    
+    # 获取最近四根MACD柱值
+    m1, m2, m3, m4 = macd_data['MACD'].iloc[-1:-5:-1]
+    
+    # 判断是否满足见顶条件：m1 < m2 < m3 > m4
+    return m1 < m2 < m3 > m4 and m1 > 0 and m2 > 0 and m3 > 0 and m4 > 0

@@ -19,6 +19,7 @@ class Broker(XtTrader):
             mini_qmt_path (str): miniQMT路径
         """
         super().__init__(account_id, mini_qmt_path)
+        self.order_records = []
         
     def get_asset(self, display=False):
         """
@@ -135,7 +136,7 @@ class Broker(XtTrader):
                     })
                 df = pd.DataFrame(data)
                 if display:
-                    logger.info(f"{GREEN}【持仓信息】{RESET} 共{len(positions)}只股票")
+                    logger.info(f"{GREEN}【持仓明细】{RESET} 共{len(positions)}只股票")
                     # 设置pandas显示选项
                     pd.set_option('display.max_rows', None)
                     pd.set_option('display.max_columns', None)
@@ -144,7 +145,7 @@ class Broker(XtTrader):
                 return df
             else:
                 if display:
-                    logger.warning(f"{YELLOW}【持仓信息】{RESET} 无持仓")
+                    logger.warning(f"{YELLOW}【持仓明细】{RESET} 暂无持仓")
                 return pd.DataFrame()
         except Exception as e:
             logger.error(f"{RED}【查询失败】{RESET} 错误:{str(e)}")
@@ -290,7 +291,7 @@ class Broker(XtTrader):
                 return False
         return True
     
-    def send_order(self, stock_code, side, volume, price, stategy_name, remark):
+    def send_order(self, stock_code, side_type, volume, price, stategy_name, remark):
         """
         发送委托
         
@@ -305,16 +306,16 @@ class Broker(XtTrader):
         返回:
             str: 订单编号，委托失败则返回None
         """
-        if not self.check_order_before_trade(stock_code, side, volume, price):
+        if not self.check_order_before_trade(stock_code, side_type, volume, price):
             return
         
-        side = xtconstant.STOCK_BUY if side == 'BUY' else xtconstant.STOCK_SELL
+        side = xtconstant.STOCK_BUY if side_type == 'BUY' else xtconstant.STOCK_SELL
         price_type = xtconstant.FIX_PRICE if price > 0 else xtconstant.LATEST_PRICE
         order_id = self.trader.order_stock(self.account, add_stock_suffix(stock_code), side, volume, price_type, price, stategy_name, remark)
         if order_id == -1:
             logger.warning(f"{YELLOW}【委托失败】{RESET} 委托失败")
             return
-        
+        logger.info(f"{GREEN}【委托成功】{RESET} 委托{order_id} 股票{stock_code} 方向-{side_type} 数量{volume} 价格{price} 策略-{stategy_name} 备注-{remark}")
         return order_id
 
         
@@ -463,3 +464,28 @@ class Broker(XtTrader):
                 cancel_result.append(result)
         return cancel_result
     
+    def order_by_signal(self, signal, strategy_name='', remark=''):
+        """
+        根据信号进行交易
+        
+        参数:
+            signal (dict): 信号字典，包含股票代码、交易方向、交易数量、交易价格、策略名称、备注
+        """
+        if signal['signal_type'] == 'BUY_VALUE':
+            order_id = self.order_value(signal['stock_code'], 'BUY', signal['value'], signal['price'], strategy_name, remark)
+        elif signal['signal_type'] == 'SELL_ALL':
+            order_id = self.sell_all(signal['stock_code'], signal['price'], strategy_name, remark)
+
+        # 添加订单记录
+        if order_id != -1:
+            self.order_records.append({
+                'order_id': order_id,
+                'stock_code': signal['stock_code'],
+                'signal_type': signal['signal_type'],
+                'value': signal['value'],
+                'price': signal['price'],
+                'stategy_name': strategy_name,
+                'remark': remark if remark != '' else  signal['signal_name'],
+                'create_time': timestamp_to_datetime_string(time.time())
+            })
+        

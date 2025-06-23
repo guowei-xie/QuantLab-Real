@@ -1,6 +1,8 @@
 from broker.data import get_stock_info, get_latest_price, get_daily_data
 from datetime import datetime, time
 from laboratory.utils import caculate_macd, is_macd_top
+from utils.logger import logger
+from utils.anis import GREEN, RESET, YELLOW
 
 def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
     """
@@ -25,6 +27,7 @@ def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
     if latest_open_price < limit_up_price and latest_close_price >= limit_up_price:
         if open_price >= limit_up_price:
             return False # 一字板或T字板
+        logger.info(f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发涨停打板信号")
         return {
             "stock_code": stock_code,
             "signal_type": "BUY_VALUE",
@@ -32,6 +35,7 @@ def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
             "price": limit_up_price,
             "signal_name": "涨停打板买入"
         }
+    
     return {}
 
 def signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_minutes=2):
@@ -68,6 +72,7 @@ def signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_mi
     
     # 开盘趋势向下
     if latest_close_price < open_price:
+        logger.info(f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发开盘趋势向下清仓信号")
         return {
             "stock_code": stock_code,
             "price": latest_close_price * 0.98,
@@ -97,6 +102,7 @@ def signal_by_board_explosion(stock_code, gmd_data, open_data):
 
     # 当前分钟K线收盘价低于涨停价，当前K线开盘价或上一根K线收盘价大于涨停价，则生成清仓信号
     if latest_close_price < limit_up_price and (latest_open_price >= limit_up_price or latest_preclose_price >= limit_up_price):
+        logger.info(f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发炸板清仓信号")
         return {
             "stock_code": stock_code,
             "signal_type": "SELL_ALL",
@@ -111,10 +117,10 @@ def signal_by_macd_sell(stock_code, gmd_data, open_data):
     # macd柱见顶：即上一分钟macd柱小于上上一根macd柱，并且上上一根macd柱大于再上一根macd柱，则生成卖出信号
     macd_data = caculate_macd(gmd_data)
     if is_macd_top(macd_data):
+        logger.info(f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发分时见顶卖出信号")
         return {
             "stock_code": stock_code,
             "signal_type": "SELL_PERCENT",
-            "percent": 0.5,
             "signal_name": "macd柱见顶卖出"
         }
     return {}

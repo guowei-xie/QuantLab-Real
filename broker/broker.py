@@ -10,7 +10,7 @@ class Broker(XtTrader):
     券商接口类，继承XtTrader类，提供交易接口和账户操作功能
     主要功能包括：账户资金查询、持仓查询、委托交易、撤单等操作
     """
-    def __init__(self, account_id, mini_qmt_path):
+    def __init__(self, account_id, mini_qmt_path, config):
         """
         初始化券商接口类
         
@@ -20,6 +20,7 @@ class Broker(XtTrader):
         """
         super().__init__(account_id, mini_qmt_path)
         self.order_records = []
+        self.config = config
         
     def get_asset(self, display=False):
         """
@@ -260,6 +261,32 @@ class Broker(XtTrader):
         except Exception as e:
             logger.error(f"{RED}【查询失败】{RESET} 错误:{str(e)}")
             return pd.DataFrame()
+        
+    def get_orders_trades(self, display=False):
+        """
+        获取已成交的订单信息
+        """
+        orders = self.get_orders(cancelable_only=False)
+        if orders.empty:
+            return pd.DataFrame() 
+        
+        # 过滤已成交的订单，订单状态为xtconstant.ORDER_SUCCEEDED
+        orders = orders[orders['委托状态'] == xtconstant.ORDER_SUCCEEDED]
+        if orders.empty:
+            return pd.DataFrame()
+
+        return orders
+    
+    def get_orders_trades_value(self):
+        """
+        获取已成交的订单市值
+        """
+        orders = self.get_orders_trades()
+        if orders.empty:
+            return 0
+        
+        return orders['成交数量'] * orders['成交均价']
+        
     
     def check_order_before_trade(self, stock_code, side, volume=100, price=0):
         """
@@ -284,11 +311,28 @@ class Broker(XtTrader):
             if self.get_cash() < round(volume * price, 2):
                 logger.warning(f"{YELLOW}【委托失败】{RESET} 可用余额不足")
                 return False
-        else:
-            available_volume = self.get_stock_available_volume(stock_code)
-            if available_volume is None or available_volume < volume:
-                logger.warning(f"{YELLOW}【委托失败】{RESET} 可用数量不足")
-                return False
+
+        # 检查总持仓市值是否超限
+        if self.get_market_value() + round(volume * price, 2) > self.config.get('POSTION', 'TOTAL_POSITION_VALUE'):
+            logger.warning(f"{YELLOW}【委托失败】{RESET} 总持仓市值超限")
+            return False
+        
+        # 检查单日总买入市值是否超限
+        if self.get_orders_trades_value() + round(volume * price, 2) > self.config.get('POSTION', 'MAX_BUY_VALUE_PER_DAY'):
+            logger.warning(f"{YELLOW}【委托失败】{RESET} 单日总买入市值超限")
+            return False
+        
+        # 检查单股最大持仓市值是否超限
+        if self.get_stock_value(stock_code) + round(volume * price, 2) > self.config.get('POSTION', 'MAX_BUY_VALUE_PER_STOCK'):
+            logger.warning(f"{YELLOW}【委托失败】{RESET} 单股最大持仓市值超限")
+            return False
+        
+        # 检查可用数量是否足够
+        available_volume = self.get_stock_available_volume(stock_code)
+        if available_volume is None or available_volume < volume:
+            logger.warning(f"{YELLOW}【委托失败】{RESET} 可用数量不足")
+            return False
+        
         return True
     
     def send_order(self, stock_code, side_type, volume, price, stategy_name, remark):
@@ -475,6 +519,11 @@ class Broker(XtTrader):
             order_id = self.order_value(signal['stock_code'], 'BUY', signal['value'], signal['price'], strategy_name, remark)
         elif signal['signal_type'] == 'SELL_ALL':
             order_id = self.sell_all(signal['stock_code'], signal['price'], strategy_name, remark)
+        elif signal['signal_type'] == 'SELL_PERCENT':
+            order_id = self.sell_available_percent(signal['stock_code'], signal['percent'], signal['price'], strategy_name, remark)
+        else:
+            logger.warning(f"{YELLOW}【委托失败】{RESET} 不支持的信号类型: {signal['signal_type']}")
+            return
 
         # 添加订单记录
         if order_id != -1:
@@ -488,4 +537,7 @@ class Broker(XtTrader):
                 'remark': remark if remark != '' else  signal['signal_name'],
                 'create_time': timestamp_to_datetime_string(time.time())
             })
+        
+        return order_id
+        
         

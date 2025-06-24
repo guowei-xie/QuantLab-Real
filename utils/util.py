@@ -132,26 +132,16 @@ def calculate_volume(total_amount, price):
     shares = (max_shares // 100) * 100
     return int(shares)
 
-def timer(func, interval, *args, **kwargs):
+def nearest_close_date_number():
     """
-    定时器工具，按指定时间间隔循环调用函数
+    获取当前时间最近的收盘日期数字
     
-    参数:
-        func (callable): 要调用的函数
-        interval (float): 调用间隔时间(秒)
-        *args: 传递给函数的位置参数
-        **kwargs: 传递给函数的关键字参数
-        
-    使用方法:
-        timer(my_function, 5, arg1, arg2, key1=value1)
-        
-    注意:
-        使用Ctrl+C可以终止定时器
+    返回:
+        str: 日期数字格式 'YYYYMMDD'
     """
-    try:
-        while True:
-            func(*args, **kwargs)
-            time.sleep(interval)
-    except Exception as e:
-        logger.error(f"{RED}定时器执行出错: {e}{RESET}")
+    current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
+    if current_time < '15:00:00':
+        return timestamp_to_date_number(time.time() - 86400)
+    else:
+        return timestamp_to_date_number(time.time())
 

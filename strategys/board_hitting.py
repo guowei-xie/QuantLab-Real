@@ -67,10 +67,10 @@ class BoardHitting:
         在9:25竞价结束后获取所有监控股票的开盘数据
         """
         current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
-        if current_time < '09:25:05':
+        if current_time < '09:30:05':
             return
 
-        logger.info(f"{GREEN}【盘前准备】{RESET}竞价结束，开始准备开盘数据...")
+        logger.info(f"{GREEN}【已开盘】{RESET}开始准备开盘数据...")
         for stock in self.buy_stock_pool + self.sell_stock_pool:
             self.open_data[stock] = prepare_open_data(stock, self.trade_date)
 
@@ -78,7 +78,7 @@ class BoardHitting:
         for stock in self.buy_stock_pool + self.sell_stock_pool:
             if self.open_data[stock] is None:
                 return
-        logger.info(f"{GREEN}【盘前准备】{RESET}开盘数据准备成功!")
+        logger.info(f"{GREEN}【已开盘】{RESET}开盘数据准备完成!")
         self.is_prepared = True
 
     def run(self):
@@ -89,19 +89,22 @@ class BoardHitting:
         """
         self.set_buy_stock_pool()
         self.set_sell_stock_pool()
-        if self.subscribe():
-            while True:
-                if not self.is_prepared:
-                    self.set_prepare_open_data()
-                else:
-                    self.trading()
-                time.sleep(1)
+        self.subscribe(period='1d')
+        self.subscribe(period='1m')
+        time.sleep(1)
 
-                # 15:00:00 收盘后，退出
-                current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
-                if current_time >= '15:00:00':
-                    logger.info(f"{GREEN}【策略退出】{RESET} 当前已收盘，策略退出")
-                    break
+        while True:
+            if not self.is_prepared:
+                self.set_prepare_open_data()
+            else:
+                self.trading()
+            time.sleep(1)
+
+            # 15:00:00 收盘后，退出
+            current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
+            if current_time >= '15:00:00':
+                logger.info(f"{GREEN}【退出】{RESET} 当前已收盘，退出策略")
+                break
 
 
     def trading(self):
@@ -134,7 +137,7 @@ class BoardHitting:
                     self.macd_sell_times += 1
         
 
-    def subscribe(self):
+    def subscribe(self, period='1m'):
         """
         订阅股票行情
         
@@ -143,16 +146,16 @@ class BoardHitting:
         Returns:
             bool: 是否成功订阅行情
         """
-        logger.info(f"{GREEN}【订阅行情】{RESET}开始订阅【自选股票池】行情数据...")
+        logger.info(f"{GREEN}【订阅行情】{RESET}开始订阅【自选股票池】{period}行情数据...")
         print("-"*100)
         if len(self.buy_stock_pool) > 0:    
-            do_subscribe_quote(self.buy_stock_pool, '1m')
+            do_subscribe_quote(self.buy_stock_pool, period)
         else:
             logger.info(f"{YELLOW}【订阅行情】{RESET}【自选股票池】为空")
         print("-"*100)
-        logger.info(f"{GREEN}【订阅行情】{RESET}开始订阅【持仓股票池】行情数据...")
+        logger.info(f"{GREEN}【订阅行情】{RESET}开始订阅【持仓股票池】{period}行情数据...")
         if len(self.sell_stock_pool) > 0:
-            do_subscribe_quote(self.sell_stock_pool, '1m', callback=self.print_data)
+            do_subscribe_quote(self.sell_stock_pool, period, callback=self.print_data)
         else:
             logger.info(f"{YELLOW}【订阅行情】{RESET}【持仓股票池】为空")
         print("-"*100)
@@ -162,6 +165,7 @@ class BoardHitting:
             logger.info(f"{YELLOW}【订阅行情】{RESET}【自选股票池】和【持仓股票池】均为空，策略退出")
             return False
         return True
+    
        
     def buy_signal(self, stock_code, gmd_data, open_data):
         """

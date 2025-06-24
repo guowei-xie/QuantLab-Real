@@ -1,3 +1,15 @@
+"""
+交易信号生成模块
+
+本模块包含各种交易信号生成函数，用于根据市场数据和技术指标生成买入或卖出信号。
+每个信号函数接收股票代码、行情数据和开盘数据等参数，返回标准格式的交易信号字典。
+
+信号类型包括:
+- BUY_VALUE: 按金额买入
+- SELL_ALL: 清仓卖出
+- SELL_PERCENT: 按比例卖出
+"""
+
 from broker.data import get_stock_info, get_latest_price, get_daily_data
 from datetime import datetime, time
 from laboratory.utils import caculate_macd, is_macd_top
@@ -86,14 +98,16 @@ def signal_by_board_explosion(stock_code, gmd_data, open_data):
     """
     炸板清仓信号
     
+    当股票从涨停状态回落时触发清仓信号，即股价从涨停板回落（炸板）时卖出。
+    
     参数:
         stock_code (str): 股票代码
-        gmd_data (DataFrame): 包含最新1m行情数据的DataFrame，需要包含'open'和'close'列
-        open_data (dict): 开盘数据字典，包含'limit_up_price'和'open_price'键
+        gmd_data (DataFrame): 包含最新1m行情数据的DataFrame，需要包含'open'、'close'和'preClose'列
+        open_data (dict): 开盘数据字典，包含'limit_up_price'键
         
     返回:
         dict: 如果触发信号返回包含清仓指令的字典，否则返回空字典
-             信号格式: {"stock_code": 股票代码, "signal_type": "SELL_ALL"}
+             信号格式: {"stock_code": 股票代码, "signal_type": "SELL_ALL", "price": 卖出价格}
     """
     latest_open_price = gmd_data['open'].iloc[-1] # 最新开盘价
     latest_close_price = gmd_data['close'].iloc[-1] # 最新收盘价
@@ -113,8 +127,27 @@ def signal_by_board_explosion(stock_code, gmd_data, open_data):
 
 # 根据macd信号分批卖出信号
 def signal_by_macd_sell(stock_code, gmd_data, open_data):
-    # 检测macd柱见顶信号，如果macd柱见顶，则生成卖出信号
-    # macd柱见顶：即上一分钟macd柱小于上上一根macd柱，并且上上一根macd柱大于再上一根macd柱，则生成卖出信号
+    """
+    MACD柱见顶卖出信号
+    
+    检测MACD柱见顶信号，如果MACD柱形成顶部拐点，则生成卖出信号。
+    MACD柱见顶定义：上一分钟MACD柱小于上上一根MACD柱，且上上一根MACD柱大于再上一根MACD柱。
+    注意：若当前股价处于涨停状态，则不生成卖出信号。
+    
+    参数:
+        stock_code (str): 股票代码
+        gmd_data (DataFrame): 包含最新行情数据的DataFrame，用于计算MACD指标
+        open_data (dict): 开盘数据字典，包含'limit_up_price'键
+        
+    返回:
+        dict: 如果触发信号返回包含按比例卖出指令的字典，否则返回空字典
+             信号格式: {"stock_code": 股票代码, "signal_type": "SELL_PERCENT", "signal_name": "macd柱见顶卖出"}
+    """
+    latest_price = gmd_data['close'].iloc[-1]
+    limit_up_price = open_data['limit_up_price'] * 0.98
+    if latest_price >= limit_up_price:
+        return {}
+
     macd_data = caculate_macd(gmd_data)
     if is_macd_top(macd_data):
         logger.info(f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发分时见顶卖出信号")

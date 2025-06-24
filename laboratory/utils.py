@@ -1,6 +1,7 @@
 from utils.util import add_stock_suffix
 from broker.data import *  
 import pandas as pd
+from utils.util import nearest_close_date_number
 
 def get_stock_market_type(stock_code):
     """
@@ -121,7 +122,8 @@ def is_nearly_limit_up(stock_code, nearly_days=5, tolerance=0.002):
         nearly_days (int): 近多少天
         tolerance (float): 允许误差
     """
-    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time='', end_time='', count=nearly_days)
+    end_date = nearest_close_date_number()
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', end_time=end_date, count=nearly_days)
     df = dict_data.get(stock_code)
     if df is None:
         return False
@@ -139,7 +141,8 @@ def get_neary_limit_up_days(stock_code, nearly_days=5, tolerance=0.002):
         nearly_days (int): 近多少天
         tolerance (float): 允许误差
     """
-    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time='', end_time='', count=nearly_days)
+    end_date = nearest_close_date_number()
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', end_time=end_date, count=nearly_days)
     df = dict_data.get(stock_code)
     if df is None:
         return 0
@@ -149,7 +152,7 @@ def get_neary_limit_up_days(stock_code, nearly_days=5, tolerance=0.002):
         if is_limit_up(stock_code, row['close'], row['preClose'], tolerance):
             limit_up_days += 1
     return limit_up_days
-    
+
 def get_last_limit_up_kline(stock_code, nearly_days=5, tolerance=0.002):
     """
     获取股票近nearly_days天中，最后一次涨停的K线
@@ -161,7 +164,8 @@ def get_last_limit_up_kline(stock_code, nearly_days=5, tolerance=0.002):
         nearly_days (int): 近多少天
         tolerance (float): 允许误差
     """
-    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time='', end_time='', count=nearly_days)
+    end_date = nearest_close_date_number()
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', end_time=end_date, count=nearly_days)
     df = dict_data.get(stock_code)
     df = df.sort_values(by='time', ascending=False)
     if df is None:
@@ -195,11 +199,12 @@ def is_last_day_limit_up(stock_code, tolerance=0.002):
         stock_code (str): 股票代码
         tolerance (float): 允许误差
     """
-    dict_data = get_daily_data(stock_list=[stock_code], period='1d', start_time='', end_time='', count=-1)
+    end_date = nearest_close_date_number()
+    dict_data = get_daily_data(stock_list=[stock_code], period='1d', end_time=end_date, count=1)
     df = dict_data.get(stock_code)
     if df is None:
         return False
-    if is_limit_up(stock_code, df.iloc[-1]['close'], df.iloc[-1]['preClose'], tolerance):
+    if is_limit_up(stock_code, df.iloc[0]['close'], df.iloc[0]['preClose'], tolerance):
         return True
     return False
 

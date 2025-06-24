@@ -23,11 +23,11 @@ def filter_stock_pool_in_xuliban(stock_list, nearly_days=5, limitup_days=2):
         limitup_days (int): 允许的最大涨停次数，默认为2次
     
     返回:
-        list: 符合蓄力板条件的股票代码列表
+        list: 符合蓄力涨停板条件的股票代码列表
     """
     result = []
-    logger.info(f"{GREEN}【模式识别-蓄力板】{RESET}正在识别图形模式...")
-    for stock in tqdm(stock_list, desc="模式识别中...", ncols=100):
+    logger.info(f"{GREEN}【模式识别-蓄力涨停板】{RESET}正在匹配识别...")
+    for stock in tqdm(stock_list, desc="匹配识别中...", ncols=100):
         # 判断近nearly_days天涨停次数，必须大于0且不超过limitup_days
         limitup_days_count = get_neary_limit_up_days(stock, nearly_days)
         if limitup_days_count > 0 and limitup_days_count <= limitup_days:
@@ -42,7 +42,7 @@ def filter_stock_pool_in_xuliban(stock_list, nearly_days=5, limitup_days=2):
                     low_price = get_klines_low_price(stock, start_time, end_time)
                     if low_price > kline['open']:
                         result.append(stock)
-    logger.info(f"{GREEN}【模式识别-蓄力板】{RESET}成功识别{len(result)}只股票")
+    logger.info(f"{GREEN}【模式识别-蓄力涨停板】{RESET}成功匹配识别{len(result)}只股票")
     return result
     
 

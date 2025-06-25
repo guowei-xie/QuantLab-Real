@@ -70,7 +70,7 @@ class BoardHitting:
         if current_time < '09:30:05':
             return
 
-        logger.info(f"{GREEN}【已开盘】{RESET}开始准备开盘数据...")
+        logger.info(f"{GREEN}【已开盘】{RESET}正在准备开盘数据...")
         for stock in self.buy_stock_pool + self.sell_stock_pool:
             self.open_data[stock] = prepare_open_data(stock, self.trade_date)
 
@@ -78,7 +78,7 @@ class BoardHitting:
         for stock in self.buy_stock_pool + self.sell_stock_pool:
             if self.open_data[stock] is None:
                 return
-        logger.info(f"{GREEN}【已开盘】{RESET}开盘数据准备完成!")
+        logger.info(f"{GREEN}【已开盘】{RESET}开盘数据准备完成，正在等待交易信号...")
         self.is_prepared = True
 
     def run(self):

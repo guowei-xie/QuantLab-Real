@@ -20,6 +20,13 @@ var/
 .installed.cfg
 *.egg
 
+# 不忽略xtquant目录中的任何文件
+!xtquant/**/*.py[cod]
+!xtquant/**/*.so
+!xtquant/**/*.log
+!xtquant/**/*.dll
+!xtquant/**/*.pyd
+
 # 虚拟环境
 venv/
 ENV/

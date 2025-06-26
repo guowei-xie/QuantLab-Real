@@ -3,7 +3,7 @@ from utils.anis import RED, GREEN, YELLOW, RESET
 from utils.logger import logger
 from broker.trader import XtTrader
 from utils.util import *
-from broker import data
+from broker.data import get_stock_name, get_latest_price
 
 class Broker(XtTrader):
     """
@@ -90,7 +90,7 @@ class Broker(XtTrader):
         asset = self.get_asset()
         if asset:
             return asset['持仓市值']
-        return None
+        return 0
     
     def get_market_percent(self):
         """
@@ -125,15 +125,18 @@ class Broker(XtTrader):
             if positions:
                 data = []
                 for pos in positions:
+                    # 根据QMT持仓字段映射构建持仓数据
                     data.append({
                         '股票代码': pos.stock_code,
-                        '股票名称': pos.stock_name,
+                        '股票名称': get_stock_name(pos.stock_code),
                         '持仓数量': pos.volume,
                         '可用数量': pos.can_use_volume,
-                        '成本价': pos.open_price,
-                        '当前价': pos.price,
+                        '开仓价': pos.open_price,
                         '市值': pos.market_value,
-                        '盈亏': pos.market_value - pos.open_price * pos.volume
+                        '成本价': pos.avg_price,
+                        '盈亏金额': pos.market_value - pos.avg_price * pos.volume,
+                        '盈亏比例': round((pos.market_value - pos.avg_price * pos.volume) / pos.avg_price * pos.volume * 100, 2) if pos.avg_price > 0 else 0,
+                        '冻结数量': pos.frozen_volume
                     })
                 df = pd.DataFrame(data)
                 if display:
@@ -164,9 +167,9 @@ class Broker(XtTrader):
         """
         positions = self.get_positions()
         if positions.empty:
-            return None
+            return {}
         position = positions[positions['股票代码'] == add_stock_suffix(stock_code)]
-        return position.to_dict(orient='records')[0] if not position.empty else None
+        return position.to_dict(orient='records')[0] if not position.empty else {}
     
     def get_stock_position_percent(self, stock_code):
         """
@@ -194,9 +197,7 @@ class Broker(XtTrader):
             float: 股票市值，无持仓则返回None
         """
         position = self.get_stock_position(stock_code)
-        if position:
-            return position['市值']
-        return None
+        return position.get('市值', 0)
 
     def get_stock_available_volume(self, stock_code):
         """
@@ -285,7 +286,7 @@ class Broker(XtTrader):
         if orders.empty:
             return 0
         
-        return orders['成交数量'] * orders['成交均价']
+        return(orders['成交数量'] * orders['成交均价']).sum()
         
     
     def check_order_before_trade(self, stock_code, side, volume=100, price=0):
@@ -302,7 +303,7 @@ class Broker(XtTrader):
             bool: 是否通过校验
         """
         if price == 0:
-            price = data.get_latest_price(stock_code)
+            price = get_latest_price(stock_code)
             if price is None or volume == 0 or volume is None:
                 logger.warning(f"{YELLOW}【委托失败】{RESET} 无法获取股票{stock_code}最新价格或交易数量为0")
                 return False
@@ -312,33 +313,34 @@ class Broker(XtTrader):
                 logger.warning(f"{YELLOW}【委托失败】{RESET} 可用余额不足")
                 return False
 
-        # 检查总持仓市值是否超限
-        total_position_limit = float(self.config.get('POSTION', 'TOTAL_POSITION_VALUE'))
-        if self.get_market_value() + round(volume * price, 2) > total_position_limit:
-            logger.warning(f"{YELLOW}【委托失败】{RESET} 总持仓市值超限")
-            return False
+            # 检查总持仓市值是否超限
+            total_position_limit = float(self.config.get('POSTION', 'TOTAL_POSITION_VALUE'))
+            if self.get_market_value() + round(volume * price, 2) > total_position_limit:
+                logger.warning(f"{YELLOW}【委托失败】{RESET} 总持仓市值超限")
+                return False
+            
+            # 检查单日总买入市值是否超限
+            daily_buy_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_DAY'))
+            if self.get_orders_trades_value() + round(volume * price, 2) > daily_buy_limit:
+                logger.warning(f"{YELLOW}【委托失败】{RESET} 单日总买入市值超限")
+                return False
+            
+            # 检查单股最大持仓市值是否超限
+            stock_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_STOCK'))
+            if self.get_stock_value(stock_code) + round(volume * price, 2) > stock_limit:
+                logger.warning(f"{YELLOW}【委托失败】{RESET} 单股最大持仓市值超限")
+                return False
         
-        # 检查单日总买入市值是否超限
-        daily_buy_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_DAY'))
-        if self.get_orders_trades_value() + round(volume * price, 2) > daily_buy_limit:
-            logger.warning(f"{YELLOW}【委托失败】{RESET} 单日总买入市值超限")
-            return False
-        
-        # 检查单股最大持仓市值是否超限
-        stock_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_STOCK'))
-        if self.get_stock_value(stock_code) + round(volume * price, 2) > stock_limit:
-            logger.warning(f"{YELLOW}【委托失败】{RESET} 单股最大持仓市值超限")
-            return False
-        
-        # 检查可用数量是否足够
-        available_volume = self.get_stock_available_volume(stock_code)
-        if available_volume is None or available_volume < volume:
-            logger.warning(f"{YELLOW}【委托失败】{RESET} 可用数量不足")
-            return False
+        else:
+            # 检查可用数量是否足够
+            available_volume = self.get_stock_available_volume(stock_code)
+            if available_volume is None or available_volume < volume:
+                logger.warning(f"{YELLOW}【委托失败】{RESET} 可用数量不足")
+                return False
         
         return True
     
-    def send_order(self, stock_code, side_type, volume, price, stategy_name, remark):
+    def send_order(self, stock_code, side_type, volume, price, strategy_name, remark):
         """
         发送委托
         
@@ -347,7 +349,7 @@ class Broker(XtTrader):
             side (str): 交易方向，'BUY'或'SELL'
             volume (int): 交易数量
             price (float): 交易价格，为0时使用市价委托
-            stategy_name (str): 策略名称
+            strategy_name (str): 策略名称
             remark (str): 备注信息
             
         返回:
@@ -358,15 +360,15 @@ class Broker(XtTrader):
         
         side = xtconstant.STOCK_BUY if side_type == 'BUY' else xtconstant.STOCK_SELL
         price_type = xtconstant.FIX_PRICE if price > 0 else xtconstant.LATEST_PRICE
-        order_id = self.trader.order_stock(self.account, add_stock_suffix(stock_code), side, volume, price_type, price, stategy_name, remark)
+        order_id = self.trader.order_stock(self.account, add_stock_suffix(stock_code), side, volume, price_type, price, strategy_name, remark)
         if order_id == -1:
             logger.warning(f"{YELLOW}【委托失败】{RESET} 委托失败")
             return
-        logger.info(f"{GREEN}【委托成功】{RESET} 委托{order_id} 股票{stock_code} 方向-{side_type} 数量{volume} 价格{price} 策略-{stategy_name} 备注-{remark}")
+        logger.info(f"{GREEN}【委托成功】{RESET} 委托{order_id} 股票{stock_code} 方向-{side_type} 数量{volume} 价格{price} 策略-{strategy_name} 备注-{remark}")
         return order_id
 
         
-    def order_value(self, stock_code, side, value=None, price=0, stategy_name='', remark=''):
+    def order_value(self, stock_code, side, value=None, price=0, strategy_name='', remark=''):
         """
         买入或卖出指定市值的股票
         
@@ -375,7 +377,7 @@ class Broker(XtTrader):
             side (str): 交易方向，'BUY'或'SELL'
             value (float): 交易市值
             price (float): 交易价格，为0时自动获取最新价格
-            stategy_name (str): 策略名称
+            strategy_name (str): 策略名称
             remark (str): 备注信息
             
         返回:
@@ -385,7 +387,7 @@ class Broker(XtTrader):
             return
         
         if price == 0:
-            price = data.get_latest_price(stock_code)
+            price = get_latest_price(stock_code)
             if price is None:
                 logger.warning(f"{YELLOW}【委托失败】{RESET} 无法获取股票{stock_code}最新价格")
                 return
@@ -395,24 +397,24 @@ class Broker(XtTrader):
             logger.warning(f"{YELLOW}【委托失败】{RESET} 交易股数为0")
             return
         
-        order_id = self.send_order(stock_code, side, volume, price, stategy_name, remark)
+        order_id = self.send_order(stock_code, side, volume, price, strategy_name, remark)
         return order_id
        
-    def sell_all(self, stock_code, price=0, stategy_name='', remark=''):
+    def sell_all(self, stock_code, price=0, strategy_name='', remark=''):
         """
         清仓指定股票
         
         参数:
             stock_code (str): 股票代码
             price (float): 交易价格，为0时自动获取最新价格
-            stategy_name (str): 策略名称
+            strategy_name (str): 策略名称
             remark (str): 备注信息
             
         返回:
             str: 订单编号，委托失败则返回None
         """
         if price == 0:
-            price = data.get_latest_price(stock_code)
+            price = get_latest_price(stock_code)
             if price is None:
                 logger.warning(f"{YELLOW}【委托失败】{RESET} 无法获取股票{stock_code}最新价格")
                 return
@@ -422,10 +424,10 @@ class Broker(XtTrader):
             logger.warning(f"{YELLOW}【委托失败】{RESET} 可用数量为0")
             return
         
-        order_id = self.send_order(stock_code, 'SELL', volume, price, stategy_name, remark)
+        order_id = self.send_order(stock_code, 'SELL', volume, price, strategy_name, remark)
         return order_id
 
-    def sell_available_percent(self, stock_code, percent=1.0, price=0, stategy_name='', remark=''):
+    def sell_available_percent(self, stock_code, percent=1.0, price=0, strategy_name='', remark=''):
         """
         按百分比卖出指定股票的可用持仓，如果计算出的交易数量不足100股则全部卖出
         
@@ -433,7 +435,7 @@ class Broker(XtTrader):
             stock_code (str): 股票代码
             percent (float): 卖出比例，默认为1.0（全部卖出）
             price (float): 交易价格，为0时自动获取最新价格
-            stategy_name (str): 策略名称
+            strategy_name (str): 策略名称
             remark (str): 备注信息
             
         返回:
@@ -449,10 +451,10 @@ class Broker(XtTrader):
         volume = calculate_volume(volume * percent, price)
         
         if volume == 0:
-            self.sell_all(stock_code, price, stategy_name, remark)
+            self.sell_all(stock_code, price, strategy_name, remark)
             return
         
-        return self.send_order(stock_code, 'SELL', volume, price, stategy_name, remark)
+        return self.send_order(stock_code, 'SELL', volume, price, strategy_name, remark)
         
         
     def cancel_order(self, order_id=None):
@@ -536,7 +538,7 @@ class Broker(XtTrader):
                 'signal_type': signal['signal_type'],
                 'value': signal['value'],
                 'price': signal['price'],
-                'stategy_name': strategy_name,
+                'strategy_name': strategy_name,
                 'remark': remark if remark != '' else  signal['signal_name'],
                 'create_time': timestamp_to_datetime_string(time.time())
             })

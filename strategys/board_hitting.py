@@ -54,7 +54,7 @@ class BoardHitting:
         从当前持仓中获取需要监控的卖出股票列表
         """
         logger.info(f"{GREEN}【持仓股票池】{RESET}开始获取...")
-        pos = self.broker.get_positions(display=True)
+        pos = self.broker.get_positions(display=False)
         if pos.empty:
             return
         self.sell_stock_pool = pos['股票代码'].tolist()
@@ -155,7 +155,7 @@ class BoardHitting:
         print("-"*100)
         logger.info(f"{GREEN}【订阅行情】{RESET}开始订阅【持仓股票池】{period}行情数据...")
         if len(self.sell_stock_pool) > 0:
-            do_subscribe_quote(self.sell_stock_pool, period, callback=self.print_data)
+            do_subscribe_quote(self.sell_stock_pool, period)
         else:
             logger.info(f"{YELLOW}【订阅行情】{RESET}【持仓股票池】为空")
         print("-"*100)
@@ -183,7 +183,10 @@ class BoardHitting:
         if signal:
             # 检查是否存在相同策略的买入订单，如果存在，则不再进行买入
             for record in self.broker.order_records:
-                if record['stock_code'] == stock_code and record['stategy_name'] == signal['stategy_name'] and record['signal_type'] == 'BUY_VALUE':
+                record_strategy_name = record.get('strategy_name', '')
+                record_stock_code = record.get('stock_code', '')
+                record_signal_type = record.get('signal_type')
+                if record_stock_code == stock_code and record_strategy_name == signal['strategy_name'] and record_signal_type == 'BUY_VALUE':
                     return {}
             return signal
         return {}

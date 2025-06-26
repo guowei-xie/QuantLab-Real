@@ -30,7 +30,7 @@ def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
         dict: 如果触发信号返回包含交易指令的字典，否则返回空字典
              信号格式: {"stock_code": 股票代码, "signal_type": "BUY_VALUE", "value": 买入金额, "price": 买入价格}
     """
-    limit_up_price = open_data['limit_up_price'] * 0.98
+    limit_up_price = open_data['limit_up_price'] * 0.995
     latest_open_price = gmd_data['open'].iloc[-1] # 1m开盘价
     latest_close_price = gmd_data['close'].iloc[-1] # 1m收盘价
     open_price = open_data['open_price'].iloc[-1] # 1d开盘价

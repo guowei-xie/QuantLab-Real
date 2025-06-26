@@ -313,17 +313,20 @@ class Broker(XtTrader):
                 return False
 
         # 检查总持仓市值是否超限
-        if self.get_market_value() + round(volume * price, 2) > self.config.get('POSTION', 'TOTAL_POSITION_VALUE'):
+        total_position_limit = float(self.config.get('POSTION', 'TOTAL_POSITION_VALUE'))
+        if self.get_market_value() + round(volume * price, 2) > total_position_limit:
             logger.warning(f"{YELLOW}【委托失败】{RESET} 总持仓市值超限")
             return False
         
         # 检查单日总买入市值是否超限
-        if self.get_orders_trades_value() + round(volume * price, 2) > self.config.get('POSTION', 'MAX_BUY_VALUE_PER_DAY'):
+        daily_buy_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_DAY'))
+        if self.get_orders_trades_value() + round(volume * price, 2) > daily_buy_limit:
             logger.warning(f"{YELLOW}【委托失败】{RESET} 单日总买入市值超限")
             return False
         
         # 检查单股最大持仓市值是否超限
-        if self.get_stock_value(stock_code) + round(volume * price, 2) > self.config.get('POSTION', 'MAX_BUY_VALUE_PER_STOCK'):
+        stock_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_STOCK'))
+        if self.get_stock_value(stock_code) + round(volume * price, 2) > stock_limit:
             logger.warning(f"{YELLOW}【委托失败】{RESET} 单股最大持仓市值超限")
             return False
         

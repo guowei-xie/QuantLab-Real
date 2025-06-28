@@ -154,6 +154,13 @@ class Broker(XtTrader):
         except Exception as e:
             logger.error(f"{RED}【查询失败】{RESET} 错误:{str(e)}")
             return pd.DataFrame()
+
+    def get_available_positions(self):
+        """
+        获取可用持仓
+        """
+        positions = self.get_positions()
+        return positions[positions['可用数量'] > 0]
         
     def get_stock_position(self, stock_code):
         """
@@ -447,6 +454,12 @@ class Broker(XtTrader):
         volume = self.get_stock_available_volume(stock_code)
         if volume is None or volume == 0:
             return
+
+        if price == 0:
+            price = get_latest_price(stock_code)
+            if price is None:
+                logger.warning(f"{YELLOW}【委托失败】{RESET} 无法获取股票{stock_code}最新价格")
+                return
         
         volume = calculate_volume(volume * percent, price)
         
@@ -536,7 +549,6 @@ class Broker(XtTrader):
                 'order_id': order_id,
                 'stock_code': signal['stock_code'],
                 'signal_type': signal['signal_type'],
-                'value': signal['value'],
                 'price': signal['price'],
                 'strategy_name': strategy_name,
                 'remark': remark if remark != '' else  signal['signal_name'],

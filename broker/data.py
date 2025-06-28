@@ -145,7 +145,7 @@ def get_stock_name(stock_code):
     stock_code_with_suffix = add_stock_suffix(stock_code)
     return xtdata.get_instrument_detail(stock_code_with_suffix)['InstrumentName']
     
-def subscribe_quote(stock_code, period, callback=None):
+def subscribe_quote(stock_code, period, log_info=True, callback=None):
     """
     订阅股票行情数据
     
@@ -159,10 +159,12 @@ def subscribe_quote(stock_code, period, callback=None):
     """
     try:
         xtdata.subscribe_quote(stock_code, period=period, callback=callback)
-        logger.info(f"{GREEN}【订阅成功】{RESET} 股票:{stock_code} {get_stock_name(stock_code)} 周期:{period}")
+        if log_info:
+            logger.info(f"{GREEN}【订阅成功】{RESET} 股票:{stock_code} {get_stock_name(stock_code)} 周期:{period}")
         return True
     except Exception as e:
-        logger.error(f"{RED}【订阅失败】{RESET} 股票:{stock_code} {get_stock_name(stock_code)} 周期:{period} 错误:{e}")
+        if log_info:
+            logger.error(f"{RED}【订阅失败】{RESET} 股票:{stock_code} {get_stock_name(stock_code)} 周期:{period} 错误:{e}")
         return False
 
 def unsubscribe_quote(stock_code):

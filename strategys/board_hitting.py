@@ -28,23 +28,13 @@ class BoardHitting:
         self.is_prepared = False
         self.fixed_value = 10000  # 固定单次买入市值
         self.macd_sell_times = 0  # macd柱见顶卖出次数
-        self.buy_stock_pool = []  # 买入股票池
         self.sell_stock_pool = [] # 卖出股票池(持仓)
+        self.buy_stock_pool = []  # 买入股票池
         self.open_data = {}       # 开盘数据缓存
+        self.signal_records = []  # 信号记录
         self.broker = Broker(account_id, mini_qmt_path, config)
         self.broker.connect()
         self.broker.get_asset(display=True)
-
-    def set_buy_stock_pool(self):
-        """
-        创建买入股票池
-        
-        从主板获取股票列表并筛选符合条件的股票
-        """
-        logger.info(f"{GREEN}【自选股票池】{RESET}开始创建...")
-        stock_list = get_stock_pool_in_main_board()
-        self.buy_stock_pool = filter_stock_pool_in_xuliban(stock_list, nearly_days=5, limitup_days=2)
-        logger.info(f"{GREEN}【自选股票池】{RESET}创建成功!")
 
     def set_sell_stock_pool(self):
         """
@@ -58,6 +48,18 @@ class BoardHitting:
             return
         self.sell_stock_pool = pos['股票代码'].tolist()
         logger.info(f"{GREEN}【持仓股票池】{RESET}获取成功!")
+    
+    def set_buy_stock_pool(self):
+        """
+        创建买入股票池
+        
+        从主板获取股票列表并筛选符合条件的股票(排除卖出股票池)
+        """
+        logger.info(f"{GREEN}【自选股票池】{RESET}开始创建...")
+        stock_list = get_stock_pool_in_main_board()
+        self.buy_stock_pool = filter_stock_pool_in_xuliban(stock_list, nearly_days=5, limitup_days=2)
+        self.buy_stock_pool = [stock for stock in self.buy_stock_pool if stock not in self.sell_stock_pool]
+        logger.info(f"{GREEN}【自选股票池】{RESET}创建成功!")
 
     def set_prepare_open_data(self):
         """
@@ -122,6 +124,7 @@ class BoardHitting:
         for stock in self.sell_stock_pool:
             signal = self.sell_signal(stock, pool_data[stock], self.open_data[stock])
             if signal:
+                logger.info(signal['log_info'])
                 if signal['signal_type'] == 'SELL_PERCENT':
                     # 第1次macd信号卖出50%，第二次卖出剩余所有
                     signal['percent'] = 0.5 if self.macd_sell_times == 0 else 1.0
@@ -132,6 +135,7 @@ class BoardHitting:
         for stock in self.buy_stock_pool:
             signal = self.buy_signal(stock, pool_data[stock], self.open_data[stock])
             if signal:
+                logger.info(signal['log_info'])
                 self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
         
 
@@ -179,7 +183,7 @@ class BoardHitting:
         """
         signal = signal_by_board_hitting(stock_code, gmd_data, open_data, self.fixed_value)
         if signal:
-            # 检查是否存在相同股票且相同信号的买入订单，如果存在，则不再进行买入
+            # 检查是否已存在该信号的委托订单，如果存在，则屏蔽信号
             for record in self.broker.order_records:
                 record_remark = record.get('remark', '')
                 record_stock_code = record.get('stock_code', '')
@@ -209,10 +213,36 @@ class BoardHitting:
             lambda: signal_by_macd_sell(stock_code, gmd_data, open_data)
         ]:
             signal = signal_func()
-            if signal and self.broker.get_stock_position(stock_code) is not None:
+            if signal and self.broker.get_stock_position(stock_code) is not None and not self.is_signal_repeat(signal, period_seconds=300):
+                signal['signal_time'] = time.time()
+                self.signal_records.append(signal)
                 return signal
                 
         return {}
+    
+    def is_signal_repeat(self, signal, period_seconds=10):
+        """
+        检查信号是否重复
+        同一支股票在限定时间内屏蔽相同信号(买入/卖出)
+        
+        Args:
+            signal (dict): 信号
+            period_seconds (int): 指定周期内不重复发出相同的信号(秒)
+        
+        Returns:
+            bool: 是否重复
+        """
+        if signal:
+            for record in self.signal_records:
+                record_stock_code = record.get('stock_code', '')
+                record_signal_name = record.get('signal_name', '')
+                record_signal_time = record.get('signal_time', 0)
+
+                if record_stock_code == signal['stock_code'] and record_signal_name == signal['signal_name']:
+                    if time.time() - record_signal_time < period_seconds:
+                        return True
+            return False
+       
 
 
  

@@ -1,4 +1,3 @@
-
 import time
 from utils.logger import logger
 from utils.anis import GREEN, RESET, YELLOW
@@ -54,7 +53,7 @@ class BoardHitting:
         从当前持仓中获取需要监控的卖出股票列表
         """
         logger.info(f"{GREEN}【持仓股票池】{RESET}开始获取...")
-        pos = self.broker.get_positions(display=False)
+        pos = self.broker.get_available_positions()
         if pos.empty:
             return
         self.sell_stock_pool = pos['股票代码'].tolist()
@@ -119,22 +118,21 @@ class BoardHitting:
             return
         
         pool_data = get_daily_data(self.buy_stock_pool, start_time=self.trade_date, period='1m', count=-1)
-
         # 交易信号与执行（先卖后买）
         for stock in self.sell_stock_pool:
             signal = self.sell_signal(stock, pool_data[stock], self.open_data[stock])
-            if signal:
-                self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
-
-        for stock in self.buy_stock_pool:
-            signal = self.buy_signal(stock, pool_data[stock], self.open_data[stock])
             if signal:
                 if signal['signal_type'] == 'SELL_PERCENT':
                     # 第1次macd信号卖出50%，第二次卖出剩余所有
                     signal['percent'] = 0.5 if self.macd_sell_times == 0 else 1.0
                 order_id = self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
-                if order_id != -1:
+                if order_id != -1 and signal['signal_type'] == 'SELL_PERCENT':
                     self.macd_sell_times += 1
+
+        for stock in self.buy_stock_pool:
+            signal = self.buy_signal(stock, pool_data[stock], self.open_data[stock])
+            if signal:
+                self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
         
 
     def subscribe(self, period='1m'):
@@ -181,12 +179,13 @@ class BoardHitting:
         """
         signal = signal_by_board_hitting(stock_code, gmd_data, open_data, self.fixed_value)
         if signal:
-            # 检查是否存在相同策略的买入订单，如果存在，则不再进行买入
+            # 检查是否存在相同股票且相同信号的买入订单，如果存在，则不再进行买入
             for record in self.broker.order_records:
-                record_strategy_name = record.get('strategy_name', '')
+                record_remark = record.get('remark', '')
                 record_stock_code = record.get('stock_code', '')
                 record_signal_type = record.get('signal_type')
-                if record_stock_code == stock_code and record_strategy_name == signal['strategy_name'] and record_signal_type == 'BUY_VALUE':
+                record_strategy_name = record.get('strategy_name', '')
+                if record_stock_code == stock_code and record_signal_type == 'BUY_VALUE' and record_remark == signal['signal_name'] and record_strategy_name == self.strategy_name:
                     return {}
             return signal
         return {}

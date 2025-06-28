@@ -68,7 +68,7 @@ class BoardHitting:
         在9:25竞价结束后获取所有监控股票的开盘数据
         """
         current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
-        if current_time < '09:30:05':
+        if current_time < '09:30:05' or current_time > '14:55:00':
             return
 
         logger.info(f"{GREEN}【已开盘】{RESET}正在准备开盘数据...")
@@ -125,11 +125,11 @@ class BoardHitting:
             signal = self.sell_signal(stock, pool_data[stock], self.open_data[stock])
             if signal:
                 logger.info(signal['log_info'])
-                if signal['signal_type'] == 'SELL_PERCENT':
+                if signal['signal_name'] == 'MACD分时见顶卖出':
                     # 第1次macd信号卖出50%，第二次卖出剩余所有
                     signal['percent'] = 0.5 if self.macd_sell_times == 0 else 1.0
                 order_id = self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
-                if order_id != -1 and signal['signal_type'] == 'SELL_PERCENT':
+                if order_id != -1 and signal['signal_name'] == 'MACD分时见顶卖出':
                     self.macd_sell_times += 1
 
         for stock in self.buy_stock_pool:

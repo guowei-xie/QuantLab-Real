@@ -30,14 +30,14 @@ def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
         dict: 如果触发信号返回包含交易指令的字典，否则返回空字典
              信号格式: {"stock_code": 股票代码, "signal_type": "BUY_VALUE", "value": 买入金额, "price": 买入价格}
     """
-    limit_up_price = open_data['limit_up_price'] * 0.995
+    limit_up_price = open_data['limit_up_price']
     latest_open_price = gmd_data['open'].iloc[-1] # 1m开盘价
     latest_close_price = gmd_data['close'].iloc[-1] # 1m收盘价
     open_price = open_data['open_price'].iloc[-1] # 1d开盘价
 
     # 涨停，并且不是一字板（开盘价等于涨停价）
-    if latest_open_price < limit_up_price and latest_close_price >= limit_up_price:
-        if open_price >= limit_up_price:
+    if latest_open_price < limit_up_price and latest_close_price >= limit_up_price * 0.998:
+        if open_price >= limit_up_price :
             return {} # 一字板或T字板
         logger.info(f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发涨停打板信号")
         return {
@@ -79,8 +79,8 @@ def signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_mi
     if not (start_minutes <= time_diff_minutes <= end_minutes): 
         return {}
 
-    latest_close_price = gmd_data['close'] # 最新分钟K线收盘价
-    open_price = open_data['open_price'] # 开盘价
+    latest_close_price = gmd_data['close'].iloc[-1]  # 最新分钟K线收盘价
+    open_price = open_data['open_price'].iloc[-1]  # 开盘价
     
     # 开盘趋势向下
     if latest_close_price < open_price:
@@ -141,10 +141,10 @@ def signal_by_macd_sell(stock_code, gmd_data, open_data):
         
     返回:
         dict: 如果触发信号返回包含按比例卖出指令的字典，否则返回空字典
-             信号格式: {"stock_code": 股票代码, "signal_type": "SELL_PERCENT", "signal_name": "macd柱见顶卖出"}
+             信号格式: {"stock_code": 股票代码, "signal_type": "SELL_PERCENT", "percent": 卖出比例, "signal_name": "macd柱见顶卖出"}
     """
     latest_price = gmd_data['close'].iloc[-1]
-    limit_up_price = open_data['limit_up_price'] * 0.98
+    limit_up_price = open_data['limit_up_price']
     if latest_price >= limit_up_price:
         return {}
 
@@ -154,6 +154,8 @@ def signal_by_macd_sell(stock_code, gmd_data, open_data):
         return {
             "stock_code": stock_code,
             "signal_type": "SELL_PERCENT",
+            "price": latest_price * 0.99,
+            "percent": 1.0,
             "signal_name": "macd柱见顶卖出"
         }
     return {}

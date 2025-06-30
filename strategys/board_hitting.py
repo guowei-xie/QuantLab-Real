@@ -118,8 +118,10 @@ class BoardHitting:
         # 9:30 ~ 11:30  13:00 ~ 15:00 交易时间
         if current_time < '09:30:05' or current_time > '14:55:00' or (current_time > '11:30:00' and current_time < '13:00:05'):
             return
-        
-        pool_data = get_daily_data(self.buy_stock_pool, start_time=self.trade_date, period='1m', count=-1)
+
+        stock_pool = self.buy_stock_pool + self.sell_stock_pool
+        pool_data = get_daily_data(stock_pool, start_time=self.trade_date, period='1m', count=-1)
+
         # 交易信号与执行（先卖后买）
         for stock in self.sell_stock_pool:
             signal = self.sell_signal(stock, pool_data[stock], self.open_data[stock])

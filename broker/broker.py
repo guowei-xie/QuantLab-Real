@@ -317,32 +317,32 @@ class Broker(XtTrader):
                 
         if side == 'BUY':
             if self.get_cash() < round(volume * price, 2):
-                logger.warning(f"{YELLOW}【委托失败】{RESET} 可用余额不足")
+                logger.warning(f"{YELLOW}【委托拦截】{RESET} 可用余额不足")
                 return False
 
             # 检查总持仓市值是否超限
             total_position_limit = float(self.config.get('POSTION', 'TOTAL_POSITION_VALUE'))
             if self.get_market_value() + round(volume * price, 2) > total_position_limit:
-                logger.warning(f"{YELLOW}【委托失败】{RESET} 总持仓市值超限")
+                logger.warning(f"{YELLOW}【委托拦截】{RESET} 总持仓市值超限")
                 return False
             
             # 检查单日总买入市值是否超限
             daily_buy_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_DAY'))
             if self.get_orders_trades_value() + round(volume * price, 2) > daily_buy_limit:
-                logger.warning(f"{YELLOW}【委托失败】{RESET} 单日总买入市值超限")
+                logger.warning(f"{YELLOW}【委托拦截】{RESET} 单日总买入市值超限")
                 return False
             
             # 检查单股最大持仓市值是否超限
             stock_limit = float(self.config.get('POSTION', 'MAX_BUY_VALUE_PER_STOCK'))
             if self.get_stock_value(stock_code) + round(volume * price, 2) > stock_limit:
-                logger.warning(f"{YELLOW}【委托失败】{RESET} 单股最大持仓市值超限")
+                logger.warning(f"{YELLOW}【委托拦截】{RESET} 单股最大持仓市值超限")
                 return False
         
         else:
             # 检查可用数量是否足够
             available_volume = self.get_stock_available_volume(stock_code)
             if available_volume is None or available_volume < volume:
-                logger.warning(f"{YELLOW}【委托失败】{RESET} 可用数量不足")
+                logger.warning(f"{YELLOW}【委托拦截】{RESET} 可用数量不足")
                 return False
         
         return True
@@ -428,7 +428,7 @@ class Broker(XtTrader):
         
         volume = self.get_stock_available_volume(stock_code)
         if volume is None or volume == 0:
-            logger.warning(f"{YELLOW}【委托失败】{RESET} 可用数量为0")
+            logger.warning(f"{YELLOW}【委托拦截】{RESET} 股票{stock_code} 可用数量为0")
             return
         
         order_id = self.send_order(stock_code, 'SELL', volume, price, strategy_name, remark)
@@ -453,6 +453,7 @@ class Broker(XtTrader):
        
         volume = self.get_stock_available_volume(stock_code)
         if volume is None or volume == 0:
+            logger.warning(f"{YELLOW}【委托拦截】{RESET} 股票{stock_code} 可用数量为0")
             return
 
         if price == 0:
@@ -461,11 +462,10 @@ class Broker(XtTrader):
                 logger.warning(f"{YELLOW}【委托失败】{RESET} 无法获取股票{stock_code}最新价格")
                 return
         
-        volume = calculate_volume(volume * percent, price)
-        
-        if volume == 0:
-            self.sell_all(stock_code, price, strategy_name, remark)
-            return
+        # 计算可用量*比例，当量不足100股时，按100股计算
+        volume = int(volume * percent)
+        if volume < 100:
+            volume = 100
         
         return self.send_order(stock_code, 'SELL', volume, price, strategy_name, remark)
         

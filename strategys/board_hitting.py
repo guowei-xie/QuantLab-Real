@@ -27,7 +27,7 @@ class BoardHitting:
         self.trade_date = timestamp_to_date_number(time.time())
         self.is_prepared = False
         self.fixed_value = 10000  # 固定单次买入市值
-        self.macd_sell_times = 0  # macd柱见顶卖出次数
+        self.macd_sell_times = {}  # macd柱见顶卖出次数
         self.sell_stock_pool = [] # 卖出股票池(持仓)
         self.buy_stock_pool = []  # 买入股票池
         self.open_data = {}       # 开盘数据缓存
@@ -127,10 +127,10 @@ class BoardHitting:
                 logger.info(signal['log_info'])
                 if signal['signal_name'] == 'MACD分时见顶卖出':
                     # 第1次macd信号卖出50%，第二次卖出剩余所有
-                    signal['percent'] = 0.5 if self.macd_sell_times == 0 else 1.0
+                    signal['percent'] = 0.5 if self.macd_sell_times.get(stock, 0) == 0 else 1.0
                 order_id = self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
                 if order_id != -1 and signal['signal_name'] == 'MACD分时见顶卖出':
-                    self.macd_sell_times += 1
+                    self.macd_sell_times[stock] = self.macd_sell_times.get(stock, 0) + 1
 
         for stock in self.buy_stock_pool:
             signal = self.buy_signal(stock, pool_data[stock], self.open_data[stock])

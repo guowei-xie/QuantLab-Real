@@ -219,7 +219,7 @@ class Broker(XtTrader):
         position = self.get_stock_position(stock_code)
         if position:
             return position['可用数量']
-        return None
+        return 0
     
     def get_orders(self, cancelable_only=False, display=False):
         """

@@ -130,7 +130,7 @@ class BoardHitting:
                 if signal['signal_name'] == 'MACD分时见顶卖出':
                     # 第1次macd信号卖出50%，第二次卖出剩余所有
                     signal['percent'] = 0.5 if self.macd_sell_times.get(stock, 0) == 0 else 1.0
-                order_id = self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
+                order_id = self.broker.order_by_signal(signal, strategy_name=self.strategy_name, remark=signal['signal_name'])
                 if order_id != -1 and signal['signal_name'] == 'MACD分时见顶卖出':
                     self.macd_sell_times[stock] = self.macd_sell_times.get(stock, 0) + 1
 
@@ -138,7 +138,7 @@ class BoardHitting:
             signal = self.buy_signal(stock, pool_data[stock], self.open_data[stock])
             if signal:
                 logger.info(signal['log_info'])
-                self.broker.order_by_signal(signal, strategy_name=self.strategy_name)
+                self.broker.order_by_signal(signal, strategy_name=self.strategy_name, remark=signal['signal_name'])
         
 
     def subscribe(self, period='1m'):
@@ -211,11 +211,11 @@ class BoardHitting:
         # 按优先级检查各种卖出信号
         for signal_func in [
             lambda: signal_by_board_explosion(stock_code, gmd_data, open_data),
-            lambda: signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_minutes=2),
+            lambda: signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds=60),
             lambda: signal_by_macd_sell(stock_code, gmd_data, open_data)
         ]:
             signal = signal_func()
-            if signal and self.broker.get_stock_position(stock_code) is not None and not self.is_signal_repeat(signal, period_seconds=300):
+            if signal and self.broker.get_stock_available_volume(stock_code) > 0 and not self.is_signal_repeat(signal, period_seconds=300):
                 signal['signal_time'] = time.time()
                 self.signal_records.append(signal)
                 return signal

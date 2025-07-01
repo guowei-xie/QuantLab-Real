@@ -51,7 +51,7 @@ def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
     
     return {}
 
-def signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_minutes=2):
+def signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds = 60):
     """
     开盘后指定时间段内，股价低于开盘价时生成清仓信号
     
@@ -59,8 +59,7 @@ def signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_mi
         stock_code (str): 股票代码
         gmd_data (DataFrame): 包含最新1m行情数据的DataFrame，需要包含'time'和'close'列
         open_data (dict): 开盘数据字典，包含'open_price'键
-        start_minutes (int, optional): 开盘后开始监控的分钟数，默认1分钟
-        end_minutes (int, optional): 开盘后结束监控的分钟数，默认2分钟
+        delay_seconds (int, optional): 开盘后开始监控的秒数，默认60秒
         
     返回:
         dict: 如果触发信号返回包含清仓指令的字典，否则返回空字典
@@ -73,11 +72,11 @@ def signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_mi
     market_open_time = datetime.combine(dt.date(), time(9, 30))
     market_open_timestamp = int(market_open_time.timestamp() * 1000)  # 转为毫秒
     
-    # 计算时间差（毫秒）并转换为分钟
-    time_diff_minutes = (latest_timestamp - market_open_timestamp) / (60 * 1000)
+    # 计算时间差（毫秒）并转换为秒
+    time_diff_seconds = (latest_timestamp - market_open_timestamp) / 1000
     
-    # 如果不在开盘后指定分钟内，返回空信号
-    if not (start_minutes <= time_diff_minutes <= end_minutes): 
+    # 如果开盘后指定秒数内，或开盘后指定秒数+60秒外，返回空信号
+    if not (delay_seconds <= time_diff_seconds <= delay_seconds + 60): 
         return {}
 
     latest_close_price = gmd_data['close'].iloc[-1]  # 最新分钟K线收盘价
@@ -85,12 +84,12 @@ def signal_by_open_down(stock_code, gmd_data, open_data, start_minutes=1, end_mi
     
     # 开盘趋势向下
     if latest_close_price < open_price:
-        log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发开盘趋势向下清仓信号"
+        log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}开盘{delay_seconds}秒内趋势向下，触发清仓条件"
         return {
             "stock_code": stock_code,
             "price": latest_close_price * 0.98,
             "signal_type": "SELL_ALL",
-            "signal_name": "开盘趋势向下清仓",
+            "signal_name": "开盘清仓",
             "log_info": log_info
         }
     return {}
@@ -118,7 +117,7 @@ def signal_by_board_explosion(stock_code, gmd_data, open_data):
 
     # 当前分钟K线收盘价低于涨停价，当前K线开盘价或上一根K线收盘价大于涨停价，则生成清仓信号
     if latest_close_price < limit_up_price and (latest_open_price >= limit_up_price or latest_preclose_price >= limit_up_price):
-        log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发炸板清仓信号"
+        log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}炸板，触发清仓条件"
         return {
             "stock_code": stock_code,
             "signal_type": "SELL_ALL",
@@ -153,13 +152,13 @@ def signal_by_macd_sell(stock_code, gmd_data, open_data):
 
     macd_data = caculate_macd(gmd_data)
     if is_macd_top(macd_data):
-        log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}触发MACD分时见顶卖出信号"
+        log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}MACD柱见顶，触发分批卖出条件"
         return {
             "stock_code": stock_code,
             "signal_type": "SELL_PERCENT",
             "price": latest_price * 0.99,
             "percent": 1.0,
-            "signal_name": "MACD分时见顶卖出",
+            "signal_name": "MACD分批卖出",
             "log_info": log_info
         }
     return {}

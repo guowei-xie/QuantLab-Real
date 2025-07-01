@@ -51,16 +51,18 @@ def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
     
     return {}
 
-def signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds = 60):
+def signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds = 60, down_percent = 0.01, is_down_preclose = True):
     """
-    开盘后指定时间段内，股价低于开盘价时生成清仓信号
+    开盘后指定时间段内，股价相对开盘价下跌指定百分比（down_percent）时生成清仓信号
+    如果设置is_down_preclose为True，则首先判断当前价格是否低于上一日收盘价，如果不低于，则返回空信号
     
     参数:
         stock_code (str): 股票代码
         gmd_data (DataFrame): 包含最新1m行情数据的DataFrame，需要包含'time'和'close'列
         open_data (dict): 开盘数据字典，包含'open_price'键
         delay_seconds (int, optional): 开盘后开始监控的秒数，默认60秒
-        
+        down_percent (float, optional): 股价相对开盘价下跌的百分比，默认1%
+        is_down_preclose (bool, optional): 是否判断当前股价是否低于上一日收盘价，默认True
     返回:
         dict: 如果触发信号返回包含清仓指令的字典，否则返回空字典
              信号格式: {"stock_code": 股票代码, "signal_type": "SELL_ALL"}
@@ -74,25 +76,33 @@ def signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds = 60):
     
     # 计算时间差（毫秒）并转换为秒
     time_diff_seconds = (latest_timestamp - market_open_timestamp) / 1000
-    
-    # 如果开盘后指定秒数内，或开盘后指定秒数+60秒外，返回空信号
-    if not (delay_seconds <= time_diff_seconds <= delay_seconds + 60): 
-        return {}
 
     latest_close_price = gmd_data['close'].iloc[-1]  # 最新分钟K线收盘价
     open_price = open_data['open_price'].iloc[-1]  # 开盘价
+    down_price = open_price * (1 - down_percent)
+
+    # 如果开盘后指定秒数内、开盘后指定秒数+60秒外，或股价下跌不到指定百分比时，返回空信号
+    if not (delay_seconds <= time_diff_seconds <= delay_seconds + 60): 
+        return {}
     
-    # 开盘趋势向下
-    if latest_close_price < open_price:
-        log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}开盘{delay_seconds}秒内趋势向下，触发清仓条件"
-        return {
+    # 如果is_down_preclose为True，则首先判断当前价格是否低于上一日收盘价，如果不低于，则返回空信号
+    if is_down_preclose:
+        latest_preclose_price = open_data['preclose_price']  # 上一根日K线收盘价
+        if latest_close_price >= latest_preclose_price:
+            return {}
+    
+    # 如果股价下跌不到指定百分比，返回空信号
+    if latest_close_price >= down_price:
+        return {}
+
+    log_info = f"{GREEN}【信号生成】{RESET} 股票{stock_code}开盘{delay_seconds}秒内趋势向下，触发清仓条件"
+    return {
             "stock_code": stock_code,
             "price": latest_close_price * 0.98,
             "signal_type": "SELL_ALL",
             "signal_name": "开盘清仓",
             "log_info": log_info
         }
-    return {}
 
 # 炸板清仓
 def signal_by_board_explosion(stock_code, gmd_data, open_data):
@@ -128,25 +138,31 @@ def signal_by_board_explosion(stock_code, gmd_data, open_data):
     return {}
 
 # 根据macd信号分批卖出信号
-def signal_by_macd_sell(stock_code, gmd_data, open_data):
+def signal_by_macd_sell(stock_code, gmd_data, open_data, is_down_preclose = True):
     """
     MACD柱见顶卖出信号
     
     检测MACD柱见顶信号，如果MACD柱形成顶部拐点，则生成卖出信号。
     MACD柱见顶定义：上一分钟MACD柱小于上上一根MACD柱，且上上一根MACD柱大于再上一根MACD柱。
-    注意：若当前股价处于涨停状态，则不生成卖出信号。
+    注意：若当前股价处于涨停状态，或(is_down_preclose为True时)当前股价高于上一日收盘价，则不生成卖出信号。
     
     参数:
         stock_code (str): 股票代码
         gmd_data (DataFrame): 包含最新行情数据的DataFrame，用于计算MACD指标
         open_data (dict): 开盘数据字典，包含'limit_up_price'键
-        
+        is_down_preclose (bool, optional): 是否判断当前股价是否低于上一日收盘价，默认True
     返回:
         dict: 如果触发信号返回包含按比例卖出指令的字典，否则返回空字典
              信号格式: {"stock_code": 股票代码, "signal_type": "SELL_PERCENT", "percent": 卖出比例, "signal_name": "macd柱见顶卖出"}
     """
     latest_price = gmd_data['close'].iloc[-1]
     limit_up_price = open_data['limit_up_price']
+    latest_preclose_price = open_data['preclose_price']
+
+    if is_down_preclose:
+        if latest_price >= latest_preclose_price:
+            return {}
+
     if latest_price >= limit_up_price:
         return {}
 

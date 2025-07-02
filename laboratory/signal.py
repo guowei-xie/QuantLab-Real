@@ -51,7 +51,7 @@ def signal_by_board_hitting(stock_code, gmd_data, open_data, fixed_value=10000):
     
     return {}
 
-def signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds = 60, down_percent = 0.01, is_down_preclose = True):
+def signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds = 30, down_percent = 0.01, is_down_preclose = True):
     """
     开盘后指定时间段内，股价相对开盘价下跌指定百分比（down_percent）时生成清仓信号
     如果设置is_down_preclose为True，则首先判断当前价格是否低于上一日收盘价，如果不低于，则返回空信号
@@ -67,22 +67,22 @@ def signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds = 60, dow
         dict: 如果触发信号返回包含清仓指令的字典，否则返回空字典
              信号格式: {"stock_code": 股票代码, "signal_type": "SELL_ALL"}
     """
-    latest_timestamp = gmd_data['time'].iloc[-1]
-    dt = datetime.fromtimestamp(latest_timestamp / 1000)  # 毫秒转秒
+    # 使用系统当前时间
+    current_time = datetime.now()
     
     # 获取当天的开盘时间（9:30）
-    market_open_time = datetime.combine(dt.date(), time(9, 30))
-    market_open_timestamp = int(market_open_time.timestamp() * 1000)  # 转为毫秒
+    current_date = current_time.date()
+    market_open_time = datetime.combine(current_date, time(9, 30))
     
-    # 计算时间差（毫秒）并转换为秒
-    time_diff_seconds = (latest_timestamp - market_open_timestamp) / 1000
+    # 计算时间差（秒）
+    time_diff_seconds = (current_time - market_open_time).total_seconds()
 
     latest_close_price = gmd_data['close'].iloc[-1]  # 最新分钟K线收盘价
     open_price = open_data['open_price'].iloc[-1]  # 开盘价
     down_price = open_price * (1 - down_percent)
 
     # 如果开盘后指定秒数内、开盘后指定秒数+60秒外，或股价下跌不到指定百分比时，返回空信号
-    if not (delay_seconds <= time_diff_seconds <= delay_seconds + 60): 
+    if not (delay_seconds <= time_diff_seconds <= delay_seconds + 30): 
         return {}
     
     # 如果is_down_preclose为True，则首先判断当前价格是否低于上一日收盘价，如果不低于，则返回空信号

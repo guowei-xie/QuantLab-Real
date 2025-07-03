@@ -174,7 +174,7 @@ def signal_by_macd_sell(stock_code, gmd_data, open_data, is_down_preclose = True
             "signal_type": "SELL_PERCENT",
             "price": latest_price * 0.99,
             "percent": 1.0,
-            "signal_name": "MACD分批卖出",
+            "signal_name": "MACD分时见顶卖出",
             "log_info": log_info
         }
     return {}

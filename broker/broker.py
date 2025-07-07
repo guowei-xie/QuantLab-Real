@@ -462,10 +462,7 @@ class Broker(XtTrader):
                 logger.warning(f"{YELLOW}【委托失败】{RESET} 无法获取股票{stock_code}最新价格")
                 return
         
-        # 计算可用量*比例，当量不足100股时，按100股计算
-        volume = int(volume * percent)
-        if volume < 100:
-            volume = 100
+        volume = int(volume * percent) // 100 * 100
         
         return self.send_order(stock_code, 'SELL', volume, price, strategy_name, remark)
         

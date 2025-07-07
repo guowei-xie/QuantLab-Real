@@ -3,7 +3,7 @@ from utils.logger import logger
 from utils.anis import GREEN, RESET, YELLOW
 from utils.util import timestamp_to_date_number
 from broker.broker import Broker
-from broker.data import do_subscribe_quote, prepare_open_data, get_daily_data
+from broker.data import do_subscribe_quote, prepare_open_data, get_daily_data, get_stock_info
 from laboratory.pool import get_stock_pool_in_main_board
 from laboratory.graph import filter_stock_pool_in_xuliban
 from laboratory.signal import signal_by_board_hitting, signal_by_open_down, signal_by_board_explosion, signal_by_macd_sell
@@ -28,6 +28,7 @@ class BoardHitting:
         self.is_prepared = False
         self.fixed_value = 10000  # 固定单次买入市值
         self.macd_sell_times = {}  # macd柱见顶卖出次数
+        self.macd_max_price = {}  # macd柱见顶卖出最高价缓存
         self.sell_stock_pool = [] # 卖出股票池(持仓)
         self.buy_stock_pool = []  # 买入股票池
         self.open_data = {}       # 开盘数据缓存
@@ -46,6 +47,13 @@ class BoardHitting:
         pos = self.broker.get_available_positions()
         if pos.empty:
             return
+
+        # 检查是否停牌
+        for stock in pos['股票代码']:
+            stock_info = get_stock_info(stock)
+            if stock_info is None or stock_info['停牌状态'] == 1:
+                pos = pos[pos['股票代码'] != stock]
+
         self.sell_stock_pool = pos['股票代码'].tolist()
         logger.info(f"{GREEN}【持仓股票池】{RESET}获取成功!")
     
@@ -211,8 +219,7 @@ class BoardHitting:
         # 按优先级检查各种卖出信号
         for signal_func in [
             lambda: signal_by_board_explosion(stock_code, gmd_data, open_data),
-            lambda: signal_by_open_down(stock_code, gmd_data, open_data, delay_seconds=60),
-            lambda: signal_by_macd_sell(stock_code, gmd_data, open_data)
+            lambda: self.signal_by_macd_sell_max_price(stock_code, gmd_data, open_data)
         ]:
             signal = signal_func()
             if signal and self.broker.get_stock_available_volume(stock_code) > 0 and not self.is_signal_repeat(signal, period_seconds=300):
@@ -221,6 +228,30 @@ class BoardHitting:
                 return signal
                 
         return {}
+
+    def signal_by_macd_sell_max_price(self, stock_code, gmd_data, open_data):
+        """
+        改造signal_by_macd_sell，当macd柱见顶时，设置macd_max_price缓存最高价
+        若当前见顶时非最高价，则生成卖出信号
+        """
+        signal = signal_by_macd_sell(stock_code, gmd_data, open_data)
+        if signal:
+            # 检查是否已缓存过最高价，若无，则缓存并生成信号
+            if stock_code not in self.macd_max_price:
+                self.macd_max_price[stock_code] = gmd_data['close'].iloc[-1]
+                return signal
+
+            # 检查当前股价是否高于缓存价，若高于，则更新缓存价，但不生成信号
+            if gmd_data['close'].iloc[-1] > self.macd_max_price[stock_code]:
+                self.macd_max_price[stock_code] = gmd_data['close'].iloc[-1]
+                return {}
+
+            # 检查当前股价是否低于缓存价，若低于，则生成卖出信号
+            if gmd_data['close'].iloc[-1] < self.macd_max_price[stock_code]:
+                return signal
+        return {}
+            
+        
     
     def is_signal_repeat(self, signal, period_seconds=10):
         """

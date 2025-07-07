@@ -20,9 +20,3 @@ if __name__ == '__main__':
     # 创建/执行策略
     strategy = BoardHitting(account_id, mini_qmt_path, config)
     strategy.run()
-
-
-
-
-
-

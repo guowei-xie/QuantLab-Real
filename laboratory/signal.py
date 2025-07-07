@@ -138,7 +138,7 @@ def signal_by_board_explosion(stock_code, gmd_data, open_data):
     return {}
 
 # 根据macd信号分批卖出信号
-def signal_by_macd_sell(stock_code, gmd_data, open_data, is_down_preclose = True):
+def signal_by_macd_sell(stock_code, gmd_data, open_data, is_down_preclose = False):
     """
     MACD柱见顶卖出信号
     

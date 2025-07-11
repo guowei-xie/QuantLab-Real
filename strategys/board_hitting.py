@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 from utils.logger import logger
 from utils.anis import GREEN, RESET, YELLOW
 from utils.util import timestamp_to_date_number
@@ -234,10 +235,14 @@ class BoardHitting:
         改造signal_by_macd_sell，当macd柱见顶时，设置macd_max_price缓存最高价
         若当前见顶时非最高价，则生成卖出信号
         """
+         # 运行时机：只在当前分钟的前10秒内运行（否则返回空信号）
+        if datetime.now().second > 10:
+            return {}
+
         signal = signal_by_macd_sell(stock_code, gmd_data, open_data)
         if signal:
             # 检查是否已缓存过最高价，若无，则缓存并生成信号
-            if stock_code not in self.macd_max_price:
+            if self.macd_max_price.get(stock_code, 0) == 0:
                 self.macd_max_price[stock_code] = gmd_data['close'].iloc[-1]
                 return signal
 
@@ -247,7 +252,7 @@ class BoardHitting:
                 return {}
 
             # 检查当前股价是否低于缓存价，若低于，则生成卖出信号
-            if gmd_data['close'].iloc[-1] < self.macd_max_price[stock_code]:
+            if gmd_data['close'].iloc[-1] < self.macd_max_price.get(stock_code, 0):
                 return signal
         return {}
             

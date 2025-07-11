@@ -123,7 +123,7 @@ def signal_by_board_explosion(stock_code, gmd_data, open_data):
     latest_open_price = gmd_data['open'].iloc[-1] # 最新开盘价
     latest_close_price = gmd_data['close'].iloc[-1] # 最新收盘价
     latest_preclose_price = gmd_data['preClose'].iloc[-1] # 上一根K线收盘价
-    limit_up_price = open_data['limit_up_price'] * 0.98
+    limit_up_price = open_data['limit_up_price'] * 0.99
 
     # 当前分钟K线收盘价低于涨停价，当前K线开盘价或上一根K线收盘价大于涨停价，则生成清仓信号
     if latest_close_price < limit_up_price and (latest_open_price >= limit_up_price or latest_preclose_price >= limit_up_price):
@@ -172,7 +172,7 @@ def signal_by_macd_sell(stock_code, gmd_data, open_data, is_down_preclose = Fals
         return {
             "stock_code": stock_code,
             "signal_type": "SELL_PERCENT",
-            "price": latest_price * 0.99,
+            "price": latest_price,
             "percent": 1.0,
             "signal_name": "MACD分时见顶卖出",
             "log_info": log_info

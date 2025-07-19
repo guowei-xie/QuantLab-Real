@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from utils.anis import RED, GREEN, YELLOW, BLUE, RESET
 import time
 from utils.logger import logger
+from configparser import ConfigParser
 
 
 def add_stock_suffix(stock_code):
@@ -139,6 +140,14 @@ def nearest_close_date_number():
     返回:
         str: 日期数字格式 'YYYYMMDD'
     """
+    config = ConfigParser()
+    config.read('config.ini', encoding='utf-8')
+    custom_time = config.get('BACKTEST', 'TODAY_DATE', fallback=None)
+
+    if custom_time is not None:
+        # 适用于回测，传入自定义日期数字格式，如'20250719'
+        return custom_time
+
     current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
     if current_time < '15:00:00':
         return timestamp_to_date_number(time.time() - 86400)

@@ -50,6 +50,16 @@ def is_st(stock_code):
     stock_name = get_stock_name(stock_code)
     return 'ST' in stock_name or '*ST' in stock_name
 
+def is_delisting(stock_code):
+    """
+    判断股票是否退市
+    
+    参数:
+        stock_code (str): 股票代码
+    """
+    stock_name = get_stock_name(stock_code)
+    return '退市' in stock_name
+
 def is_suspended(stock_code):
     """
     判断股票是否停牌
@@ -92,12 +102,36 @@ def is_limit_up(stock_code, price, pre_close, tolerance=0.002):
         stock_code (str): 股票代码
         price (float): 当前价格
         pre_close (float): 前收盘价
+        tolerance (float): 允许误差
     
     返回:
         bool: 是否涨停
     """
     return price / pre_close - 1 >= get_stock_limit_rate(stock_code) - tolerance
+
+def is_word_one_limit_up(stock_code, price, pre_close, open, tolerance=0.002):
+    """
+    判断股票是否为一字板涨停(允许误差tolerance)
     
+    参数:
+        stock_code (str): 股票代码
+        price (float): 今收盘价
+        pre_close (float): 昨收盘价
+        open (float): 今开盘价
+        tolerance (float): 允许误差
+    
+    返回:
+        bool: 是否为一字板涨停
+    """    
+    limit_up = is_limit_up(stock_code, price, pre_close, tolerance)
+    if limit_up:
+        if price == open:
+            return True
+        else:
+            return False
+    else:
+        return False
+
 def is_limit_down(stock_code, price, pre_close, tolerance=0.002):
     """
     判断股票是否跌停(允许误差tolerance)
@@ -132,7 +166,7 @@ def is_nearly_limit_up(stock_code, nearly_days=5, tolerance=0.002):
             return True 
     return False
     
-def get_neary_limit_up_days(stock_code, nearly_days=5, tolerance=0.002):
+def get_neary_limit_up_days(stock_code, nearly_days=5, tolerance=0.002, is_word_one=-1):
     """
     获取股票近nearly_days天有过涨停的天数，返回天数
     
@@ -140,6 +174,7 @@ def get_neary_limit_up_days(stock_code, nearly_days=5, tolerance=0.002):
         stock_code (str): 股票代码
         nearly_days (int): 近多少天
         tolerance (float): 允许误差
+        is_word_one (int): 是否为一字板涨停，0为否，1为是,-1为不限
     """
     end_date = nearest_close_date_number()
     dict_data = get_daily_data(stock_list=[stock_code], period='1d', end_time=end_date, count=nearly_days)
@@ -148,9 +183,25 @@ def get_neary_limit_up_days(stock_code, nearly_days=5, tolerance=0.002):
         return 0
     
     limit_up_days = 0
-    for index, row in df.iterrows():   
-        if is_limit_up(stock_code, row['close'], row['preClose'], tolerance):
-            limit_up_days += 1
+    
+    # 不限涨停类型
+    if is_word_one == -1:
+        for index, row in df.iterrows():
+            if is_limit_up(stock_code, row['close'], row['preClose'], tolerance):
+                limit_up_days += 1
+    
+    # 只统计一字板涨停
+    if is_word_one == 1:
+        for index, row in df.iterrows():
+            if is_word_one_limit_up(stock_code, row['close'], row['preClose'], row['open'], tolerance):
+                limit_up_days += 1
+    
+    # 只统计非一字板涨停
+    if is_word_one == 0:
+        for index, row in df.iterrows():
+            if is_limit_up(stock_code, row['close'], row['preClose'], tolerance) and not is_word_one_limit_up(stock_code, row['close'], row['preClose'], row['open'], tolerance):
+                limit_up_days += 1
+
     return limit_up_days
 
 def get_last_limit_up_kline(stock_code, nearly_days=5, tolerance=0.002):
@@ -175,7 +226,6 @@ def get_last_limit_up_kline(stock_code, nearly_days=5, tolerance=0.002):
             return row
     return None
 
-# 获取指定日期区间K线的最低价
 def get_klines_low_price(stock_code, start_time, end_time):
     """
     获取指定日期区间K线的最低价
@@ -207,6 +257,36 @@ def is_last_day_limit_up(stock_code, tolerance=0.002):
     if is_limit_up(stock_code, df.iloc[0]['close'], df.iloc[0]['preClose'], tolerance):
         return True
     return False
+
+def is_flipping_after_hitting_the_limit(stock_code, kline, tolerance=0.002):
+    """
+    判断股票是否在涨停后炸板（即最高价为涨停价，但收盘价低于最高价）
+    
+    参数:
+        stock_code (str): 股票代码
+        kline (DataFrame): 股票日K线数据
+        tolerance (float): 允许误差
+    """
+    limit_rate = get_stock_limit_rate(stock_code)
+    limit_price = kline['preClose'] * (1 + limit_rate - tolerance)
+    if kline['high'] >= limit_price and kline['close'] < kline['high']:
+        return True
+    return False
+
+def is_continuous_volume_reduction(klines):
+    """
+    判断股票是否连续缩量，缩量定义为成交量小于前一天的成交量
+    注意：klines中日期是升序，不限制天数，但至少需要2天
+    参数:
+        klines (DataFrame): 股票日K线数据
+    """
+    if len(klines) < 2:
+        return False
+
+    for i in range(1, len(klines)):
+        if klines.iloc[i]['volume'] > klines.iloc[i - 1]['volume']:
+            return False
+    return True
 
 def caculate_macd(gmd_data):
     """

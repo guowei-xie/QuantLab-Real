@@ -160,7 +160,11 @@ class Broker(XtTrader):
         获取可用持仓
         """
         positions = self.get_positions()
+        if positions.empty:
+            return pd.DataFrame()
+
         return positions[positions['可用数量'] > 0]
+        
         
     def get_stock_position(self, stock_code):
         """

@@ -60,7 +60,7 @@ def filter_stock_pool_buy_on_dips(stock_list, n_days=5, m_days=10, limitup_days=
     """
 
     result = []
-    logger.info(f"{GREEN}【模式识别-低吸】{RESET}正在匹配识别...")
+    logger.info(f"{GREEN}【模式识别-低吸图形】{RESET}正在匹配识别...")
     for stock in tqdm(stock_list, desc="匹配识别中...", ncols=100):
         # 1. 获取近n_days天涨停次数，需要涨停次数不超过limitup_days次，否则跳过该股票
         limitup_days_count = get_neary_limit_up_days(stock, n_days)
@@ -108,7 +108,7 @@ def filter_stock_pool_buy_on_dips(stock_list, n_days=5, m_days=10, limitup_days=
             continue
         
         result.append(stock)
-    logger.info(f"{GREEN}【模式识别-低吸】{RESET}成功匹配识别{len(result)}只股票")
+    logger.info(f"{GREEN}【模式识别-低吸图形】{RESET}成功匹配识别{len(result)}只股票")
     return result
 
 

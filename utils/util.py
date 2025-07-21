@@ -154,3 +154,13 @@ def nearest_close_date_number():
     else:
         return timestamp_to_date_number(time.time())
 
+def is_trading_time():
+    """
+    判断当前是否为交易时间
+    """
+    current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
+    # 9:30 ~ 11:30  13:00 ~ 15:00 交易时间
+    if current_time < '09:30:05' or current_time > '14:55:00' or (current_time > '11:30:00' and current_time < '13:00:00'):
+        return False
+    else:
+        return True

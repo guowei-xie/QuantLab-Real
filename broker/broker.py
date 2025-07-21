@@ -3,7 +3,7 @@ from utils.anis import RED, GREEN, YELLOW, RESET
 from utils.logger import logger
 from broker.trader import XtTrader
 from utils.util import *
-from broker.data import get_stock_name, get_latest_price
+from broker.data import get_stock_name, get_latest_price, get_stock_info
 
 class Broker(XtTrader):
     """
@@ -162,6 +162,12 @@ class Broker(XtTrader):
         positions = self.get_positions()
         if positions.empty:
             return pd.DataFrame()
+        
+        # 检查是否停牌
+        for stock in positions['股票代码']:
+            stock_info = get_stock_info(stock)
+            if stock_info is None or stock_info['停牌状态'] == 1:
+                positions = positions[positions['股票代码'] != stock]
 
         return positions[positions['可用数量'] > 0]
         

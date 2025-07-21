@@ -185,12 +185,12 @@ def unsubscribe_quote(stock_code):
         logger.error(f"{RED}【取消订阅失败】{RESET} 股票:{stock_code} 错误:{e}")
         return False
 
-def do_subscribe_quote(stock_list, period, callback=None):
+def do_subscribe_quote(stock_list, period, log_info=True, callback=None):
     """
     订阅股票行情数据
     """
     for stock in stock_list:
-        subscribe_quote(stock, period, callback=callback)
+        subscribe_quote(stock, period, log_info=log_info, callback=callback)
     time.sleep(1)
 
 def prepare_open_data(stock_code, trade_date):

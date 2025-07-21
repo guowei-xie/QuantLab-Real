@@ -109,6 +109,19 @@ def is_limit_up(stock_code, price, pre_close, tolerance=0.002):
     """
     return price / pre_close - 1 >= get_stock_limit_rate(stock_code) - tolerance
 
+def is_limit_up_kline(kline, tolerance=0.002):
+    """
+    判断股票是否涨停(允许误差tolerance)
+    
+    参数:
+        kline (DataFrame): 股票日K线数据
+        tolerance (float): 允许误差
+    
+    返回:
+        bool: 是否涨停
+    """
+    return is_limit_up(kline['stock_code'], kline['close'], kline['preClose'], tolerance)
+
 def is_word_one_limit_up(stock_code, price, pre_close, open, tolerance=0.002):
     """
     判断股票是否为一字板涨停(允许误差tolerance)
@@ -146,6 +159,16 @@ def is_limit_down(stock_code, price, pre_close, tolerance=0.002):
         bool: 是否跌停
     """
     return price / pre_close - 1 <= -get_stock_limit_rate(stock_code) + tolerance
+
+def is_limit_down_kline(kline, tolerance=0.002):
+    """
+    判断股票是否跌停(允许误差tolerance)
+    
+    参数:
+        kline (DataFrame): 股票日K线数据
+        tolerance (float): 允许误差
+    """
+    return is_limit_down(kline['stock_code'], kline['close'], kline['preClose'], tolerance)
 
 def is_nearly_limit_up(stock_code, nearly_days=5, tolerance=0.002):
     """
@@ -273,18 +296,19 @@ def is_flipping_after_hitting_the_limit(stock_code, kline, tolerance=0.002):
         return True
     return False
 
-def is_continuous_volume_reduction(klines):
+def is_continuous_volume_reduction(klines, tolerance=0):
     """
     判断股票是否连续缩量，缩量定义为成交量小于前一天的成交量
     注意：klines中日期是升序，不限制天数，但至少需要2天
     参数:
         klines (DataFrame): 股票日K线数据
+        tolerance (float): 允许误差
     """
     if len(klines) < 2:
         return False
 
     for i in range(1, len(klines)):
-        if klines.iloc[i]['volume'] > klines.iloc[i - 1]['volume']:
+        if klines.iloc[i]['volume'] > klines.iloc[i - 1]['volume'] * (1 + tolerance):
             return False
     return True
 
@@ -338,3 +362,23 @@ def is_macd_top(macd_data):
     
     # 判断是否满足见顶条件：m1 < m2 < m3 > m4
     return m1 < m2 < m3 > m4 and m1 > 0 and m2 > 0 and m3 > 0 and m4 > 0
+
+def get_kline_entity(kline, is_max=True)    :
+    """
+    获取单根K线实体价格
+    
+    参数:
+        kline (DataFrame): 股票日K线数据
+        is_max (bool): 是否获取实体最高价，True为最高价，False为最低价
+    """
+    if is_max:
+        if kline['close'] > kline['open']:
+            return kline['close']
+        else:
+            return kline['open']
+    else:
+        if kline['close'] > kline['open']:
+            return kline['open']
+        else:
+            return kline['close']
+

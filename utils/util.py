@@ -142,7 +142,10 @@ def nearest_close_date_number():
     """
     config = ConfigParser()
     config.read('config.ini', encoding='utf-8')
-    custom_time = config.get('BACKTEST', 'TODAY_DATE', fallback=None)
+    if config.get('BACKTEST', 'TURN_ON') == 'True':
+        custom_time = config.get('BACKTEST', 'TODAY_DATE', fallback=None)
+    else:
+        custom_time = None
 
     if custom_time is not None:
         # 适用于回测，传入自定义日期数字格式，如'20250719'

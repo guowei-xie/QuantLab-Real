@@ -167,3 +167,9 @@ def is_trading_time():
         return False
     else:
         return True
+    
+def current_date_number():
+    """
+    获取当前日期数字
+    """
+    return timestamp_to_date_number(time.time())

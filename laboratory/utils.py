@@ -144,6 +144,20 @@ def is_word_one_limit_up(stock_code, price, pre_close, open, tolerance=0.002):
             return False
     else:
         return False
+    
+# 计算单日K线的涨停股价
+def caculate_kline_limit_up_price(stock_code, kline, tolerance=0.002):
+    """
+    计算单日K线的涨停股价
+    
+    参数:
+        stock_code (str): 股票代码
+        kline (DataFrame): 股票日K线数据
+        tolerance (float): 允许误差
+    """
+    return kline['preClose'] * (1 + get_stock_limit_rate(stock_code) - tolerance)
+    
+    
 
 def is_limit_down(stock_code, price, pre_close, tolerance=0.002):
     """
@@ -363,6 +377,23 @@ def is_macd_top(macd_data):
     # 判断是否满足见顶条件：m1 < m2 < m3 > m4
     return m1 < m2 < m3 > m4 and m1 > 0 and m2 > 0 and m3 > 0 and m4 > 0
 
+def is_macd_bottom(macd_data):
+    """
+    判断MACD柱是否见底
+    MACD柱见底定义：T0为当前分钟，T-1分钟MACD绿柱短于T-2分钟MACD绿柱，且T-2分钟MACD绿柱短于T-3分钟MACD绿柱，但T-3分钟MACD绿柱长于T-4分钟MACD绿柱。
+    
+    参数:
+        macd_data (DataFrame): 包含MACD列的行情数据
+    """
+    if len(macd_data) < 5:
+        return False
+    
+    # 获取最近五根MACD柱值  
+    m1, m2, m3, m4, m5 = macd_data['MACD'].iloc[-1:-6:-1]
+    
+    # 判断是否满足见底条件：m1 < m2 < m3 < m4 < m5
+    return m1 > m2 > m3 > m4 < m5 and m1 < 0 and m2 < 0 and m3 < 0 and m4 < 0 and m5 < 0
+
 def get_kline_entity(kline, is_max=True)    :
     """
     获取单根K线实体价格
@@ -381,4 +412,13 @@ def get_kline_entity(kline, is_max=True)    :
             return kline['open']
         else:
             return kline['close']
-
+        
+def caculate_minute_average_price(gmd_data):
+    """
+    计算分时均价(从开盘至当下)
+    分时均价定义：从开盘至当下，所有成交额除以所有成交量
+    
+    参数:
+        gmd_data (DataFrame): 包含最新分时行情数据的DataFrame
+    """
+    return gmd_data['amount'].sum() / gmd_data['volume'].sum()

@@ -152,6 +152,10 @@ class BuyOnDips:
         5.当前价格高于上一日收盘价
         
         """
+        # 0.判断是否已生成过建仓信号
+        if self.cache_data[stock]['buy_signal_generated']:
+            return {}
+        
         # 1.判断今日分时(从开盘至当下)最高价是否已突破过昨日实体最高价
         if daily_data['high'].max() <= self.cache_data[stock]['yesterday_entity_max']:
             return {}
@@ -183,6 +187,10 @@ class BuyOnDips:
         
         # 生成建仓信号
         log_info = f"{GREEN}【建仓-信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 触发建仓条件"
+
+        # 记录建仓信号到缓存数据
+        self.cache_data[stock]['buy_signal_generated'] = True
+
         return {
             "stock_code": stock,
             "signal_type": "BUY_VALUE",
@@ -194,4 +202,54 @@ class BuyOnDips:
 
     # 卖出信号生成
     def sell_signal(self, stock, daily_data):
+        """
+        卖出条件
+        情况1：分时监听到炸板，全仓卖出
+        情况2：尾盘14:50时，如果今日放量（允许10%误差）且收阴线，则全仓卖出
+        情况3：当前价格低于T日开盘价，MACD顶分批卖出
+        情况4：昨日（不含建仓日）放量，MACD顶分批卖出
+        情况5：昨日放量超过T日成交量，MACD顶分批卖出
+        情况6：昨日涨停、炸板，MACD顶分批卖出
+        若当前涨停，则不卖出
+        """
+        
+
         pass
+
+    def sub_sell_signal_explode(self, stock, daily_data):
+        """
+        分时监听到炸板，全仓卖出信号
+        """
+        pass
+
+    def sub_sell_signal_final_time(self, stock, daily_data):
+        """
+        尾盘14:50时，如果今日成交量超过昨日成交量的1.1倍且收阴线，则全仓卖出信号
+        """
+        pass
+
+    def sub_sell_signal_stop_loss(self, stock, daily_data):
+        """
+        当前价格低于T日开盘价，MACD顶分批卖出信号
+        """
+        pass
+
+    def sub_sell_signal_volume_surge(self, stock, daily_data):
+        """
+        昨日成交量超过前日成交量的1.1倍，MACD顶分批卖出信号
+        但昨日是建仓日时，则信号无效
+        """
+        pass
+
+    def sub_sell_signal_volume_surge_T(self, stock, daily_data):
+        """
+        昨日成交量>=T日成交量的0.95倍，MACD顶分批卖出信号
+        """
+        pass
+
+    def sub_sell_signal_limit_up_and_explode(self, stock, daily_data):
+        """
+        昨日涨停、炸板，MACD顶分批卖出信号
+        """
+        pass
+    

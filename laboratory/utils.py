@@ -109,7 +109,7 @@ def is_limit_up(stock_code, price, pre_close, tolerance=0.002):
     """
     return price / pre_close - 1 >= get_stock_limit_rate(stock_code) - tolerance
 
-def is_limit_up_kline(kline, tolerance=0.002):
+def is_limit_up_kline(stock_code, kline, tolerance=0.002):
     """
     判断股票是否涨停(允许误差tolerance)
     
@@ -120,7 +120,7 @@ def is_limit_up_kline(kline, tolerance=0.002):
     返回:
         bool: 是否涨停
     """
-    return is_limit_up(kline['stock_code'], kline['close'], kline['preClose'], tolerance)
+    return is_limit_up(stock_code, kline['close'], kline['preClose'], tolerance)
 
 def is_word_one_limit_up(stock_code, price, pre_close, open, tolerance=0.002):
     """
@@ -148,15 +148,17 @@ def is_word_one_limit_up(stock_code, price, pre_close, open, tolerance=0.002):
 # 计算单日K线的涨停股价
 def caculate_kline_limit_up_price(stock_code, kline, tolerance=0.002):
     """
-    计算单日K线的涨停股价
+    计算次日K线的涨停股价
     
     参数:
         stock_code (str): 股票代码
-        kline (DataFrame): 股票日K线数据
+        kline (series): 股票日K线数据
         tolerance (float): 允许误差
+    返回:
+        float: 涨停股价 
     """
-    return kline['preClose'] * (1 + get_stock_limit_rate(stock_code) - tolerance)
-    
+    close_price = kline['close']
+    return close_price * (1 + get_stock_limit_rate(stock_code) - tolerance)
     
 
 def is_limit_down(stock_code, price, pre_close, tolerance=0.002):
@@ -174,7 +176,7 @@ def is_limit_down(stock_code, price, pre_close, tolerance=0.002):
     """
     return price / pre_close - 1 <= -get_stock_limit_rate(stock_code) + tolerance
 
-def is_limit_down_kline(kline, tolerance=0.002):
+def is_limit_down_kline(stock_code, kline, tolerance=0.002):
     """
     判断股票是否跌停(允许误差tolerance)
     
@@ -182,7 +184,7 @@ def is_limit_down_kline(kline, tolerance=0.002):
         kline (DataFrame): 股票日K线数据
         tolerance (float): 允许误差
     """
-    return is_limit_down(kline['stock_code'], kline['close'], kline['preClose'], tolerance)
+    return is_limit_down(stock_code, kline['close'], kline['preClose'], tolerance)
 
 def is_nearly_limit_up(stock_code, nearly_days=5, tolerance=0.002):
     """
@@ -401,17 +403,20 @@ def get_kline_entity(kline, is_max=True)    :
     参数:
         kline (DataFrame): 股票日K线数据
         is_max (bool): 是否获取实体最高价，True为最高价，False为最低价
+    
+    返回:
+        float: 实体价格
     """
     if is_max:
-        if kline['close'] > kline['open']:
-            return kline['close']
+        if kline.iloc[-1]['close'] > kline.iloc[-1]['open']:
+            return kline.iloc[-1]['close']
         else:
-            return kline['open']
+            return kline.iloc[-1]['open']
     else:
-        if kline['close'] > kline['open']:
-            return kline['open']
+        if kline.iloc[-1]['close'] > kline.iloc[-1]['open']:
+            return kline.iloc[-1]['open']
         else:
-            return kline['close']
+            return kline.iloc[-1]['close']
         
 def caculate_minute_average_price(gmd_data):
     """
@@ -422,3 +427,14 @@ def caculate_minute_average_price(gmd_data):
         gmd_data (DataFrame): 包含最新分时行情数据的DataFrame
     """
     return gmd_data['amount'].sum() / gmd_data['volume'].sum()
+
+def is_board_explosion(stock_code, gmd_data):
+    """
+    判断股票是否炸板
+    
+    参数:
+        stock_code (str): 股票代码
+        gmd_data (DataFrame): 包含最新分时行情数据的DataFrame
+    """
+    
+    

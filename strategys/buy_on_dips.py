@@ -1,13 +1,13 @@
 from broker.broker import Broker
 import time
-from utils.util import is_trading_time, timestamp_to_date_number, current_date_number
+from utils.util import is_trading_time, timestamp_to_date_number, current_date_number, yesterday_date_number, nearest_close_date_number, is_market_closed
 from utils.logger import logger
 from utils.anis import GREEN, RESET, RED
 from laboratory.pool import get_stock_pool_in_main_board
 from laboratory.graph import filter_stock_pool_buy_on_dips
 from laboratory.graph import get_last_limit_up_kline
 from laboratory.utils import *
-from broker.data import get_daily_data, nearest_close_date_number
+from broker.data import get_daily_data
 from utils.database import Database
 
 
@@ -53,6 +53,10 @@ class BuyOnDips:
     # 盘中交易
     def trading(self):
         while True:
+            if is_market_closed():
+                logger.info(f"{GREEN}【收盘】{RESET}当前已收盘，策略结束")
+                break
+
             if not is_trading_time():
                 time.sleep(1)
                 continue
@@ -73,6 +77,7 @@ class BuyOnDips:
                 if signal:
                     logger.info(signal['log_info'])
                     self.broker.order_by_signal(signal, strategy_name=self.strategy_name, remark=signal['signal_desc'])
+
             
     # 盘后处理
     def post_processing(self):
@@ -100,23 +105,30 @@ class BuyOnDips:
     def set_cache_data(self):
         # 缓存买入股票池所需的判断条件
         for stock in self.buy_stock_pool:
+            self.cache_data[stock] = {}
             # 缓存昨日K线实体最高价
             kline = get_daily_data(stock_list=[stock], period='1d', end_time=nearest_close_date_number(), count=1).get(stock)
             self.cache_data[stock]['yesterday_entity_max'] = get_kline_entity(kline)
+            # 缓存今日涨停价
+            self.cache_data[stock]['limit_up_price'] = caculate_kline_limit_up_price(stock, kline.iloc[0])
 
         # 缓存卖出股票池所需的判断条件
-        for stock in self.sell_stock_pool:
+        sell_stock_pool = self.sell_stock_pool.copy()
+        for stock in sell_stock_pool:
+            self.cache_data[stock] = {}
             # 获取最近涨停日
-            limit_up_date = get_last_limit_up_kline(stock, n_days=self.n_days)['time']
+            limit_up_date = get_last_limit_up_kline(stock, nearly_days=30)['time']
             limit_up_date = timestamp_to_date_number(limit_up_date)
             klines = get_daily_data(stock_list=[stock], period='1d', start_time=limit_up_date, end_time=nearest_close_date_number(), count=-1).get(stock)
             yesterday_kline = klines.iloc[-1]
             # 缓存昨日是否炸板
             self.cache_data[stock]['yesterday_flipping'] = is_flipping_after_hitting_the_limit(stock, yesterday_kline)
             # 缓存昨日是否跌停
-            self.cache_data[stock]['yesterday_limit_down'] = is_limit_down_kline(yesterday_kline)
+            self.cache_data[stock]['yesterday_limit_down'] = is_limit_down_kline(stock, yesterday_kline)
             # 缓存昨日是否涨停
-            self.cache_data[stock]['yesterday_limit_up'] = is_limit_up_kline(yesterday_kline)
+            self.cache_data[stock]['yesterday_limit_up'] = is_limit_up_kline(stock, yesterday_kline)
+            # 缓存昨日成交量
+            self.cache_data[stock]['yesterday_volume'] = yesterday_kline['volume']
             # 缓存昨日是否缩量（允许10%误差）
             self.cache_data[stock]['yesterday_volume_reduction'] = is_continuous_volume_reduction(klines.iloc[:-2], tolerance=0.1) 
             # 缓存最近涨停日的开盘价
@@ -138,8 +150,12 @@ class BuyOnDips:
 
     # 订阅行情
     def subscribe(self):
-        stock_list = self.buy_stock_pool + self.sell_stock_pool
-        do_subscribe_quote(stock_list, '1m')
+        # 订阅自选股票池
+        logger.info(f"{GREEN}【订阅行情】{RESET}开始订阅自选股票池...")
+        do_subscribe_quote(self.buy_stock_pool, '1m')
+        # 订阅持仓股票池
+        logger.info(f"{GREEN}【订阅行情】{RESET}开始订阅持仓股票池...")
+        do_subscribe_quote(self.sell_stock_pool, '1m')
 
     # 买入信号生成
     def buy_signal(self, stock, daily_data):
@@ -153,7 +169,7 @@ class BuyOnDips:
         
         """
         # 0.判断是否已生成过建仓信号
-        if self.cache_data[stock]['buy_signal_generated']:
+        if self.cache_data[stock].get('buy_signal_generated', False):
             return {}
         
         # 1.判断今日分时(从开盘至当下)最高价是否已突破过昨日实体最高价
@@ -165,7 +181,7 @@ class BuyOnDips:
             return {}
         
         # 3.判断当前MACD是否拐点
-        if not is_macd_bottom(daily_data):
+        if not is_macd_bottom(caculate_macd(daily_data)):
             return {}
         
         # 4.判断当前价格是否高于分时均价
@@ -208,48 +224,286 @@ class BuyOnDips:
         情况2：尾盘14:50时，如果今日放量（允许10%误差）且收阴线，则全仓卖出
         情况3：当前价格低于T日开盘价，MACD顶分批卖出
         情况4：昨日（不含建仓日）放量，MACD顶分批卖出
-        情况5：昨日放量超过T日成交量，MACD顶分批卖出
+        情况5：昨日放量超过T+1日成交量，MACD顶分批卖出
         情况6：昨日涨停、炸板，MACD顶分批卖出
         若当前涨停，则不卖出
-        """
-        
+        """        
+        result = {}
+        for signal_func in [
+            lambda: self.sub_sell_signal_explode(stock, daily_data),
+            lambda: self.sub_sell_signal_final_time(stock, daily_data),
+            lambda: self.sub_sell_signal_stop_loss(stock, daily_data),
+            lambda: self.sub_sell_signal_volume_surge(stock, daily_data),
+            lambda: self.sub_sell_signal_volume_surge_T(stock, daily_data),
+            lambda: self.sub_sell_signal_limit_up_and_explode(stock, daily_data)
+        ]:
+            signal = signal_func()
+            if signal:
+                result = signal
+                break
 
-        pass
+        self.update_macd_top_price(stock, daily_data)
+
+        # 当产生了有效信号时，继续判断是否有可用持仓，如果无持仓则屏蔽该信号
+        if result:
+            position = self.broker.get_available_positions()
+            if position.empty:
+                return {}
+            else:
+                log = result.get('log_info', '')
+                logger.info(log)
+
+        return result
 
     def sub_sell_signal_explode(self, stock, daily_data):
         """
         分时监听到炸板，全仓卖出信号
         """
-        pass
+        # 最高价突破过涨停价，且当前价格低于涨停价
+        if daily_data['high'].max() < self.cache_data[stock]['limit_up_price']:
+            return {}
+        
+        # 当前价格低于涨停价
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['limit_up_price']:
+            return {}
+        
+        return {
+            "stock_code": stock,
+            "signal_type": "SELL_ALL",
+            "price": daily_data['close'].iloc[-1] * 0.98,
+            "signal_desc": self.strategy_name + "-炸板清仓",
+            "log_info": f"{GREEN}【全部清仓-信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 触发炸板清仓条件"
+        }
 
     def sub_sell_signal_final_time(self, stock, daily_data):
         """
         尾盘14:50时，如果今日成交量超过昨日成交量的1.1倍且收阴线，则全仓卖出信号
         """
-        pass
+        # 当前时间在14:50时
+        if time.localtime().tm_hour != 14 or time.localtime().tm_min != 50:
+            return {}
+        
+        # 今日当前累计成交量超过昨日成交量的1.1倍
+        if daily_data['volume'].sum() < self.cache_data[stock]['yesterday_volume'] * 1.1:
+            return {}
+        
+        # 今日收阴线（即当前分时价格低于第一个分时K线开盘价）
+        if daily_data['close'].iloc[-1] >= daily_data['open'].iloc[0]:
+            return {}
+        
+        return {
+            "stock_code": stock,
+            "signal_type": "SELL_ALL",
+            "price": daily_data['close'].iloc[-1],
+            "signal_desc": self.strategy_name + "-尾盘清仓",
+            "log_info": f"{GREEN}【全部清仓-信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 触发尾盘清仓条件"
+        }
 
     def sub_sell_signal_stop_loss(self, stock, daily_data):
         """
         当前价格低于T日开盘价，MACD顶分批卖出信号
+        运行频率：每分钟运行一次（通过缓存记录该分钟是否已运行过该函数）
         """
-        pass
+        # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数
+        update_minute = time.localtime().tm_min
+        if self.cache_data[stock].get('macd_signal_updated', 0) == update_minute:
+            return {}
+
+        # 当前价格低于T日开盘价
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['limit_up_open']:
+            return {}
+        
+        # 当前MACD柱见顶
+        if not is_macd_top(caculate_macd(daily_data)):
+            return {}
+        
+        # 当前价格低于MACD上一次顶价格
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+            return {}
+        
+        # 当前价格非涨停
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['limit_up_price']:
+            return {}
+        
+        # 首次分批卖出50%，之后全仓卖出
+        if self.cache_data[stock].get('sell_percent_record', 0) == 0:
+            sell_percent = 0.5
+            self.cache_data[stock]['sell_percent_record'] = 1
+        else:
+            sell_percent = 1.0
+        
+        self.cache_data[stock]['macd_signal_updated'] = update_minute
+
+        return {
+            "stock_code": stock,
+            "signal_type": "SELL_PERCENT",
+            "percent": sell_percent,
+            "price": daily_data['close'].iloc[-1],
+            "signal_desc": self.strategy_name + "-MACD顶分批止损",
+            "log_info": f"{GREEN}【分批清仓-信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 触发MACD顶分批止损条件"
+        }
 
     def sub_sell_signal_volume_surge(self, stock, daily_data):
         """
-        昨日成交量超过前日成交量的1.1倍，MACD顶分批卖出信号
+        昨日放量，则今日MACD顶分批卖出信号
         但昨日是建仓日时，则信号无效
         """
-        pass
+        # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数，且距离上次运行间隔至少5分钟
+        update_minute = time.localtime().tm_min
+        last_updated = self.cache_data[stock].get('macd_signal_updated', 0)
+
+        # 检查当前分钟是否已运行过，或者距离上次运行不足5分钟
+        if update_minute == last_updated or (update_minute - last_updated) % 60 < 5:
+            return {}
+
+        # 昨日缩量，则信号无效
+        if self.cache_data[stock]['yesterday_volume_reduction']:
+            return {}
+
+        # 昨日是建仓日时，则信号无效
+        if self.cache_data[stock]['build_date'] == yesterday_date_number():
+            return {}
+        
+        # 当前价格涨停，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['limit_up_price']:
+            return {}
+        
+        # 当前非MACD柱见顶，则信号无效
+        if not is_macd_top(caculate_macd(daily_data)):
+            return {}
+        
+        # 当前价格高于MACD上一次顶价格，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+            return {}
+        
+        # 首次分批卖出50%，之后全仓卖出
+        if self.cache_data[stock].get('sell_percent_record', 0) == 0:
+            sell_percent = 0.5
+            self.cache_data[stock]['sell_percent_record'] = 1
+        else:
+            sell_percent = 1.0
+        
+        self.cache_data[stock]['macd_signal_updated'] = update_minute
+
+        return {
+            "stock_code": stock,
+            "signal_type": "SELL_PERCENT",
+            "percent": sell_percent,
+            "price": daily_data['close'].iloc[-1],
+            "signal_desc": self.strategy_name + "-昨日放量分批卖出",
+            "log_info": f"{GREEN}【分批清仓-信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 触发昨日放量分批卖出条件"
+        }        
 
     def sub_sell_signal_volume_surge_T(self, stock, daily_data):
         """
-        昨日成交量>=T日成交量的0.95倍，MACD顶分批卖出信号
+        昨日成交量>=T+1日成交量的0.95倍，MACD顶分批卖出信号
         """
-        pass
+        # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数，且距离上次运行间隔至少5分钟
+        update_minute = time.localtime().tm_min
+        last_updated = self.cache_data[stock].get('macd_signal_updated', 0)
+
+        # 检查当前分钟是否已运行过，或者距离上次运行不足5分钟
+        if update_minute == last_updated or (update_minute - last_updated) % 60 < 5:
+            return {}
+        
+        # 昨日成交量<T+1日成交量的0.95倍，则信号无效
+        if self.cache_data[stock]['yesterday_volume'] < self.cache_data[stock]['limit_up_next_day_volume'] * 0.95:
+            return {}
+        
+        # 当前非MACD柱见顶，则信号无效
+        if not is_macd_top(caculate_macd(daily_data)):
+            return {}
+        
+        # 当前价格高于MACD上一次顶价格，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+            return {}
+        
+        # 当前价格涨停，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['limit_up_price']:
+            return {}
+        
+        # 首次分批卖出50%，之后全仓卖出
+        if self.cache_data[stock].get('sell_percent_record', 0) == 0:
+            sell_percent = 0.5
+            self.cache_data[stock]['sell_percent_record'] = 1
+        else:
+            sell_percent = 1.0
+        
+        self.cache_data[stock]['macd_signal_updated'] = update_minute
+        
+        return {
+            "stock_code": stock,
+            "signal_type": "SELL_PERCENT",
+            "percent": sell_percent,
+            "price": daily_data['close'].iloc[-1],
+            "signal_desc": self.strategy_name + "-昨日放量超过涨停次日成交量分批卖出",
+            "log_info": f"{GREEN}【分批清仓-信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 触发昨日放量超过涨停次日成交量分批卖出条件"
+        }
 
     def sub_sell_signal_limit_up_and_explode(self, stock, daily_data):
         """
-        昨日涨停、炸板，MACD顶分批卖出信号
+        昨日涨停、炸板、跌停，MACD顶分批卖出信号
         """
-        pass
+        # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数，且距离上次运行间隔至少5分钟
+        update_minute = time.localtime().tm_min
+        last_updated = self.cache_data[stock].get('macd_signal_updated', 0)
+
+        # 检查当前分钟是否已运行过，或者距离上次运行不足5分钟
+        if update_minute == last_updated or (update_minute - last_updated) % 60 < 5:
+            return {}
+        
+        # 昨日没有涨停、炸板、跌停中的任一情况时，信号无效
+        if not (self.cache_data[stock]['yesterday_limit_up'] or 
+                self.cache_data[stock]['yesterday_flipping'] or 
+                self.cache_data[stock]['yesterday_limit_down']):
+            return {}
+        
+        # 当前非MACD柱见顶，则信号无效
+        if not is_macd_top(caculate_macd(daily_data)):
+            return {}
+        
+        # 当前价格高于MACD上一次顶价格，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+            return {}
+        
+        # 当前价格涨停，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['limit_up_price']:
+            return {}
+        
+        # 首次分批卖出50%，之后全仓卖出
+        if self.cache_data[stock].get('sell_percent_record', 0) == 0:
+            sell_percent = 0.5
+            self.cache_data[stock]['sell_percent_record'] = 1
+        else:
+            sell_percent = 1.0
+        
+        self.cache_data[stock]['macd_signal_updated'] = update_minute
+
+        return {
+            "stock_code": stock,
+            "signal_type": "SELL_PERCENT",
+            "percent": sell_percent,
+            "price": daily_data['close'].iloc[-1],
+            "signal_desc": self.strategy_name + "-昨日涨停、炸板、跌停分批卖出",
+            "log_info": f"{GREEN}【分批清仓-信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 触发昨日涨停、炸板、跌停分批卖出条件"
+        }
+
+    def update_macd_top_price(self, stock, daily_data):
+        """
+        缓存当前最高的MACD顶价格
+        """
+        # 每分钟只需要更新一次，通过缓存记录该分钟是否已更新过
+        update_minute = time.localtime().tm_min
+        if self.cache_data[stock].get('macd_top_price_updated', 0) == update_minute:
+            return
+
+        macd_data = caculate_macd(daily_data)
+        if is_macd_top(macd_data):
+            if self.cache_data[stock].get('macd_top_price', 0) == 0:
+                self.cache_data[stock]['macd_top_price'] = daily_data['close'].iloc[-1]
+            elif self.cache_data[stock]['macd_top_price'] < daily_data['close'].iloc[-1]:
+                self.cache_data[stock]['macd_top_price'] = daily_data['close'].iloc[-1]
+
+        self.cache_data[stock]['macd_top_price_updated'] = update_minute
+   
     

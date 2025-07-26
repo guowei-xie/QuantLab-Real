@@ -168,8 +168,25 @@ def is_trading_time():
     else:
         return True
     
+#判断是否已收盘
+def is_market_closed():
+    """
+    判断当前是否已收盘
+    """
+    current_time = time.strftime('%H:%M:%S', time.localtime(time.time()))
+    if current_time > '15:00:00':
+        return True
+    else:
+        return False
+
 def current_date_number():
     """
     获取当前日期数字
     """
     return timestamp_to_date_number(time.time())
+
+def yesterday_date_number():
+    """
+    获取昨天日期数字
+    """
+    return timestamp_to_date_number(time.time() - 86400)

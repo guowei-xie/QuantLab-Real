@@ -426,7 +426,7 @@ def caculate_minute_average_price(gmd_data):
     参数:
         gmd_data (DataFrame): 包含最新分时行情数据的DataFrame
     """
-    return gmd_data['amount'].sum() / gmd_data['volume'].sum()
+    return gmd_data['amount'].sum() / gmd_data['volume'].sum() / 100
 
 def is_board_explosion(stock_code, gmd_data):
     """

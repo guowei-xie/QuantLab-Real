@@ -52,6 +52,7 @@ class BuyOnDips:
 
     # 盘中交易
     def trading(self):
+        logger.info(f"{GREEN}【交易】{RESET}开始执行交易，等待信号生成...")
         while True:
             if is_market_closed():
                 logger.info(f"{GREEN}【收盘】{RESET}当前已收盘，策略结束")
@@ -103,6 +104,7 @@ class BuyOnDips:
 
     # 初始化：缓存数据
     def set_cache_data(self):
+        logger.info(f"{GREEN}【缓存数据】{RESET}开始缓存股池静态数据...")
         # 缓存买入股票池所需的判断条件
         for stock in self.buy_stock_pool:
             self.cache_data[stock] = {}
@@ -111,6 +113,8 @@ class BuyOnDips:
             self.cache_data[stock]['yesterday_entity_max'] = get_kline_entity(kline)
             # 缓存今日涨停价
             self.cache_data[stock]['limit_up_price'] = caculate_kline_limit_up_price(stock, kline.iloc[0])
+            # 缓存昨日收盘价
+            self.cache_data[stock]['yesterday_close'] = kline.iloc[0]['close']
 
         # 缓存卖出股票池所需的判断条件
         sell_stock_pool = self.sell_stock_pool.copy()
@@ -147,6 +151,8 @@ class BuyOnDips:
                 # 从sell_stock_pool中去掉该股票
                 self.sell_stock_pool.remove(stock)
                 logger.warning(f"{RED}【建仓日期获取失败】{RESET}股票{stock}建仓日期获取失败，从预卖出股票池中移除")
+            
+        logger.info(f"{GREEN}【缓存数据】{RESET}缓存股池静态数据成功!")
 
     # 订阅行情
     def subscribe(self):

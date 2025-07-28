@@ -151,7 +151,6 @@ class Database:
                 'order_remark': result[8]
             }
         else:
-            logger.warning(f"获取最近一次买入记录失败: {stock_code}")
             return {}
     
     def get_last_sell_record(self, stock_code):

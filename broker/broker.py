@@ -473,6 +473,9 @@ class Broker(XtTrader):
                 return
         
         volume = int(volume * percent) // 100 * 100
+        # 如果计算出的交易数量不足100股则全部卖出
+        if volume < 100 and volume > 0:
+            volume = 100
         
         return self.send_order(stock_code, 'SELL', volume, price, strategy_name, remark)
         

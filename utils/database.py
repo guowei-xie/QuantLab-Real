@@ -134,7 +134,7 @@ class Database:
         """
         self.connect()
         self.cursor.execute('''
-            SELECT * FROM order_record WHERE stock_code = ? AND order_type = '买入' ORDER BY traded_time DESC LIMIT 1
+            SELECT * FROM order_record WHERE stock_code = ? AND order_type = '23' ORDER BY traded_time DESC LIMIT 1
         ''', (stock_code,))
         result = self.cursor.fetchone()
         self.close()
@@ -164,7 +164,7 @@ class Database:
         """
         self.connect()
         self.cursor.execute('''
-            SELECT * FROM order_record WHERE stock_code = ? AND order_type = '卖出' ORDER BY traded_time DESC LIMIT 1
+            SELECT * FROM order_record WHERE stock_code = ? AND order_type = '24' ORDER BY traded_time DESC LIMIT 1
         ''', (stock_code,))
         result = self.cursor.fetchone()
         self.close()
@@ -186,17 +186,30 @@ class Database:
     def is_in_position(self, stock_code):
         """
         基于数据库记录判断股票是否在持仓中
-        
+
         参数:
             stock_code (str): 股票代码
         """
         last_buy_date = self.get_last_buy_record(stock_code).get('traded_date', '')
         last_sell_date = self.get_last_sell_record(stock_code).get('traded_date', '')
-        if last_buy_date == '' and last_sell_date == '': # 历史无持仓记录
+
+        # 情况1：买卖都没有记录
+        if last_buy_date == '' and last_sell_date == '':
             return False
+        # 情况2：有买入但没有卖出记录，说明持仓中
+        elif last_buy_date != '' and last_sell_date == '':
+            return True
+        # 情况3：有卖出但没有买入记录，说明不持仓
+        elif last_buy_date == '' and last_sell_date != '':
+            return False
+        # 情况4：买卖都有记录，比较日期
         else:
-            diff_days = int(last_sell_date) - int(last_buy_date)
-            if diff_days <= 0:
+            try:
+                diff_days = int(last_sell_date) - int(last_buy_date)
+            except Exception:
+                # 日期格式异常，保守返回False
+                return False
+            if diff_days < 0:
                 return True
             else:
                 return False

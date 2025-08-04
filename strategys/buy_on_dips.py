@@ -31,6 +31,8 @@ class BuyOnDips:
         self.sell_stock_pool = [] # 预卖出股票池
         self.buy_stock_pool = [] # 预买入股票池
         self.cache_data = {} # 缓存数据
+        self.buy_signal_allowed = config.get('SIGNAL', 'BUY_SIGNAL')
+        self.sell_signal_allowed = config.get('SIGNAL', 'SELL_SIGNAL')
         
 
     # 策略运行函数
@@ -64,7 +66,6 @@ class BuyOnDips:
 
             # 获取分时行情数据
             daily_data = get_daily_data(self.buy_stock_pool + self.sell_stock_pool, start_time=current_date_number(), period='1m', count=-1)
-
             # 卖出信号生成与执行
             for stock in self.sell_stock_pool:
                 signal = self.sell_signal(stock, daily_data[stock])
@@ -87,6 +88,9 @@ class BuyOnDips:
     # 初始化：持仓股票池(预卖出股票池)
     def set_sell_stock_pool(self):
         logger.info(f"{GREEN}【持仓股票池】{RESET}开始获取...")
+        if not self.sell_signal_allowed:
+            logger.info(f"{GREEN}【持仓股票池】{RESET}卖出信号已关闭，跳过获取持仓股票池")
+            return
         pos = self.broker.get_available_positions()
         if pos.empty:
             return
@@ -97,6 +101,9 @@ class BuyOnDips:
     # 初始化：买入股票池（预买入股票池）
     def set_buy_stock_pool(self):
         logger.info(f"{GREEN}【自选股票池】{RESET}开始创建...")
+        if not self.buy_signal_allowed:
+            logger.info(f"{GREEN}【自选股票池】{RESET}买入信号已关闭，跳过获取自选股票池")
+            return
         stock_list = get_stock_pool_in_main_board()
         self.buy_stock_pool = filter_stock_pool_buy_on_dips(stock_list, n_days=self.n_days, m_days=self.m_days, limitup_days=self.limitup_days)
         self.buy_stock_pool = [stock for stock in self.buy_stock_pool if stock not in self.sell_stock_pool]
@@ -120,6 +127,12 @@ class BuyOnDips:
         sell_stock_pool = self.sell_stock_pool.copy()
         for stock in sell_stock_pool:
             self.cache_data[stock] = {}
+            # 初始化macd_top_price
+            self.cache_data[stock]['macd_top_price'] = 0
+            # 初始化macd_signal_updated
+            self.cache_data[stock]['macd_signal_updated'] = 0
+            # 初始化sell_percent_record
+            self.cache_data[stock]['sell_percent_record'] = 0
             # 获取最近涨停日
             limit_up_date = get_last_limit_up_kline(stock, nearly_days=30)['time']
             limit_up_date = timestamp_to_date_number(limit_up_date)
@@ -134,7 +147,7 @@ class BuyOnDips:
             # 缓存昨日成交量
             self.cache_data[stock]['yesterday_volume'] = yesterday_kline['volume']
             # 缓存昨日是否缩量（允许10%误差）
-            self.cache_data[stock]['yesterday_volume_reduction'] = is_continuous_volume_reduction(klines.iloc[:-2], tolerance=0.1) 
+            self.cache_data[stock]['yesterday_volume_reduction'] = is_continuous_volume_reduction(klines.tail(2), tolerance=0.1) 
             # 缓存最近涨停日的开盘价
             self.cache_data[stock]['limit_up_open'] = klines.iloc[0]['open']
             # 缓存最近涨停日的次日成交量
@@ -235,6 +248,11 @@ class BuyOnDips:
         若当前涨停，则不卖出
         """        
         result = {}
+
+        if daily_data.empty:
+            logger.warning(f"{RED}【卖出信号生成】{RESET} 股票{stock} {get_stock_name(stock)} 行情数据获取失败，跳过卖出信号生成")
+            return {}
+        
         for signal_func in [
             lambda: self.sub_sell_signal_explode(stock, daily_data),
             lambda: self.sub_sell_signal_final_time(stock, daily_data),
@@ -252,12 +270,10 @@ class BuyOnDips:
 
         # 当产生了有效信号时，继续判断是否有可用持仓，如果无持仓则屏蔽该信号
         if result:
-            position = self.broker.get_available_positions()
-            if position.empty:
+            available_volume = self.broker.get_stock_available_volume(stock)
+            if available_volume == 0:
                 return {}
-            else:
-                log = result.get('log_info', '')
-                logger.info(log)
+            logger.info(result.get('log_info', ''))
 
         return result
 

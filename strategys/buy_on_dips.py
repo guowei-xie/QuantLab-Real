@@ -327,8 +327,12 @@ class BuyOnDips:
         运行频率：每分钟运行一次（通过缓存记录该分钟是否已运行过该函数）
         """
         # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数
-        update_minute = time.localtime().tm_min
-        if self.cache_data[stock].get('macd_signal_updated', 0) == update_minute:
+        current_time = time.time()
+        last_updated = self.cache_data[stock].get('macd_signal_updated', 0)
+        
+        # 检查是否在同一分钟内（60秒内）
+        # 如果是第一次运行（last_updated为0），则不检查时间间隔
+        if last_updated != 0 and current_time - last_updated < 60:
             return {}
 
         # 当前价格低于T日开盘价
@@ -339,8 +343,8 @@ class BuyOnDips:
         if not is_macd_top(caculate_macd(daily_data)):
             return {}
         
-        # 当前价格低于MACD上一次顶价格
-        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+        # 当前价格低于MACD上一次顶价格或macd_top_price为0
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price'] and self.cache_data[stock]['macd_top_price'] != 0:
             return {}
         
         # 当前价格非涨停
@@ -354,7 +358,7 @@ class BuyOnDips:
         else:
             sell_percent = 1.0
         
-        self.cache_data[stock]['macd_signal_updated'] = update_minute
+        self.cache_data[stock]['macd_signal_updated'] = current_time
 
         return {
             "stock_code": stock,
@@ -371,11 +375,12 @@ class BuyOnDips:
         但昨日是建仓日时，则信号无效
         """
         # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数，且距离上次运行间隔至少5分钟
-        update_minute = time.localtime().tm_min
+        current_time = time.time()
         last_updated = self.cache_data[stock].get('macd_signal_updated', 0)
 
         # 检查当前分钟是否已运行过，或者距离上次运行不足5分钟
-        if update_minute == last_updated or (update_minute - last_updated) % 60 < 5:
+        # 如果是第一次运行（last_updated为0），则不检查时间间隔
+        if last_updated != 0 and current_time - last_updated < 300:  # 5分钟 = 300秒
             return {}
 
         # 昨日缩量，则信号无效
@@ -394,8 +399,8 @@ class BuyOnDips:
         if not is_macd_top(caculate_macd(daily_data)):
             return {}
         
-        # 当前价格高于MACD上一次顶价格，则信号无效
-        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+        # 当前价格高于MACD上一次顶价格(macd_top_price不为0)，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price'] and self.cache_data[stock]['macd_top_price'] != 0:
             return {}
         
         # 首次分批卖出50%，之后全仓卖出
@@ -405,7 +410,7 @@ class BuyOnDips:
         else:
             sell_percent = 1.0
         
-        self.cache_data[stock]['macd_signal_updated'] = update_minute
+        self.cache_data[stock]['macd_signal_updated'] = current_time
 
         return {
             "stock_code": stock,
@@ -421,11 +426,12 @@ class BuyOnDips:
         昨日成交量>=T+1日成交量的0.95倍，MACD顶分批卖出信号
         """
         # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数，且距离上次运行间隔至少5分钟
-        update_minute = time.localtime().tm_min
+        current_time = time.time()
         last_updated = self.cache_data[stock].get('macd_signal_updated', 0)
 
         # 检查当前分钟是否已运行过，或者距离上次运行不足5分钟
-        if update_minute == last_updated or (update_minute - last_updated) % 60 < 5:
+        # 如果是第一次运行（last_updated为0），则不检查时间间隔
+        if last_updated != 0 and current_time - last_updated < 300:  # 5分钟 = 300秒
             return {}
         
         # 昨日成交量<T+1日成交量的0.95倍，则信号无效
@@ -436,8 +442,8 @@ class BuyOnDips:
         if not is_macd_top(caculate_macd(daily_data)):
             return {}
         
-        # 当前价格高于MACD上一次顶价格，则信号无效
-        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+        # 当前价格高于MACD上一次顶价格(macd_top_price不为0)，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price'] and self.cache_data[stock]['macd_top_price'] != 0:
             return {}
         
         # 当前价格涨停，则信号无效
@@ -451,7 +457,7 @@ class BuyOnDips:
         else:
             sell_percent = 1.0
         
-        self.cache_data[stock]['macd_signal_updated'] = update_minute
+        self.cache_data[stock]['macd_signal_updated'] = current_time
         
         return {
             "stock_code": stock,
@@ -467,11 +473,12 @@ class BuyOnDips:
         昨日涨停、炸板、跌停，MACD顶分批卖出信号
         """
         # 每分钟只需要运行一次，通过缓存记录该分钟是否已运行过该函数，且距离上次运行间隔至少5分钟
-        update_minute = time.localtime().tm_min
+        current_time = time.time()
         last_updated = self.cache_data[stock].get('macd_signal_updated', 0)
 
         # 检查当前分钟是否已运行过，或者距离上次运行不足5分钟
-        if update_minute == last_updated or (update_minute - last_updated) % 60 < 5:
+        # 如果是第一次运行（last_updated为0），则不检查时间间隔
+        if last_updated != 0 and current_time - last_updated < 300:  # 5分钟 = 300秒
             return {}
         
         # 昨日没有涨停、炸板、跌停中的任一情况时，信号无效
@@ -484,8 +491,8 @@ class BuyOnDips:
         if not is_macd_top(caculate_macd(daily_data)):
             return {}
         
-        # 当前价格高于MACD上一次顶价格，则信号无效
-        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price']:
+        # 当前价格高于MACD上一次顶价格(macd_top_price不为0)，则信号无效
+        if daily_data['close'].iloc[-1] >= self.cache_data[stock]['macd_top_price'] and self.cache_data[stock]['macd_top_price'] != 0:
             return {}
         
         # 当前价格涨停，则信号无效
@@ -499,7 +506,7 @@ class BuyOnDips:
         else:
             sell_percent = 1.0
         
-        self.cache_data[stock]['macd_signal_updated'] = update_minute
+        self.cache_data[stock]['macd_signal_updated'] = current_time
 
         return {
             "stock_code": stock,
@@ -515,8 +522,12 @@ class BuyOnDips:
         缓存当前最高的MACD顶价格
         """
         # 每分钟只需要更新一次，通过缓存记录该分钟是否已更新过
-        update_minute = time.localtime().tm_min
-        if self.cache_data[stock].get('macd_top_price_updated', 0) == update_minute:
+        current_time = time.time()
+        last_updated = self.cache_data[stock].get('macd_top_price_updated', 0)
+        
+        # 检查是否在同一分钟内（60秒内）
+        # 如果是第一次运行（last_updated为0），则不检查时间间隔
+        if last_updated != 0 and current_time - last_updated < 60:
             return
 
         macd_data = caculate_macd(daily_data)
@@ -526,6 +537,6 @@ class BuyOnDips:
             elif self.cache_data[stock]['macd_top_price'] < daily_data['close'].iloc[-1]:
                 self.cache_data[stock]['macd_top_price'] = daily_data['close'].iloc[-1]
 
-        self.cache_data[stock]['macd_top_price_updated'] = update_minute
+        self.cache_data[stock]['macd_top_price_updated'] = current_time
    
     
